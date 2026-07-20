@@ -2,9 +2,10 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { CONFIG } from './config'
+import { fetchGallery, uploadFiles, deleteFile, type GalleryItem } from './gallery'
 
 // ============================================================
-// Curvas de easing profesionales (estilo GSAP premium)
+// Curvas de easing profesionales
 // ============================================================
 const Easing = {
   inOutQuart: (t: number) => t < 0.5 ? 8*t*t*t*t : 1 - Math.pow(-2*t + 2, 4) / 2,
@@ -26,7 +27,7 @@ const Easing = {
 // ============================================================
 // Tipos
 // ============================================================
-type SceneType = 'logo' | 'photo' | 'final'
+type SceneType = 'logo' | 'photo' | 'video' | 'final'
 
 interface Scene {
   id: string
@@ -36,30 +37,21 @@ interface Scene {
   end: number
   transitionIn: number
   transitionOut: number
-  photoIndex?: number
+  mediaIndex?: number
+  mediaItem?: GalleryItem
+  caption?: string
 }
 
 interface Particle {
-  x: number
-  y: number
-  vy: number
-  amp: number
-  freq: number
-  phase: number
-  baseOpacity: number
-  opacityAmp: number
-  opacityFreq: number
-  opacityPhase: number
-  depth: number
-  size: number
-  twinkle: number
-  twinkleFreq: number
+  x: number; y: number; vy: number; amp: number; freq: number; phase: number
+  baseOpacity: number; opacityAmp: number; opacityFreq: number; opacityPhase: number
+  depth: number; size: number; twinkle: number; twinkleFreq: number
 }
 
 // ============================================================
-// Hook del timeline
+// Hook del timeline dinámico
 // ============================================================
-function useTimeline() {
+function useTimeline(galleryItems: GalleryItem[]) {
   const scenesRef = useRef<Scene[]>([])
   const totalDurationRef = useRef(0)
   const [currentTime, setCurrentTime] = useState(0)
@@ -73,34 +65,50 @@ function useTimeline() {
 
   useEffect(() => { isPlayingRef.current = isPlaying }, [isPlaying])
 
+  // Construir timeline dinámicamente según los items de la galería
   useEffect(() => {
     const tl = CONFIG.timeline
     const scenes: Scene[] = []
     let total = 0
+
+    // Escena 1: Logo intro
     scenes.push({
       id: 'scene-logo', type: 'logo', duration: tl.logoIntro,
       start: total, end: total + tl.logoIntro,
       transitionIn: 1.8, transitionOut: 1.6
     })
     total += tl.logoIntro
-    CONFIG.images.photos.forEach((_, i) => {
+
+    // Escenas dinámicas (fotos y videos)
+    galleryItems.forEach((item, i) => {
+      const isVideo = item.type === 'video'
+      const duration = isVideo ? tl.videoDuration : tl.photoDuration
       scenes.push({
-        id: `scene-photo-${i}`, type: 'photo', photoIndex: i,
-        duration: tl.photoDuration,
-        start: total, end: total + tl.photoDuration,
-        transitionIn: tl.photoTransition, transitionOut: tl.photoTransition
+        id: `scene-media-${i}`,
+        type: isVideo ? 'video' : 'photo',
+        mediaIndex: i,
+        mediaItem: item,
+        caption: item.caption,
+        duration,
+        start: total,
+        end: total + duration,
+        transitionIn: tl.photoTransition,
+        transitionOut: tl.photoTransition
       })
-      total += tl.photoDuration
+      total += duration
     })
+
+    // Escena final
     scenes.push({
       id: 'scene-final', type: 'final', duration: tl.finalScene,
       start: total, end: total + tl.finalScene,
       transitionIn: 1.8, transitionOut: 1.4
     })
     total += tl.finalScene + tl.loopPause
+
     scenesRef.current = scenes
     totalDurationRef.current = total
-  }, [])
+  }, [galleryItems])
 
   useEffect(() => {
     const loop = (time: number) => {
@@ -193,11 +201,9 @@ function useTimeline() {
 }
 
 // ============================================================
-// Sistema de partículas mejorado (con twinkle)
+// Sistema de partículas
 // ============================================================
 function useParticles(containerRef: React.RefObject<HTMLDivElement | null>) {
-  const particlesRef = useRef<Particle[]>([])
-  const elementsRef = useRef<HTMLDivElement[]>([])
   const rafRef = useRef<number | null>(null)
   const lastTimeRef = useRef(0)
 
@@ -221,8 +227,7 @@ function useParticles(containerRef: React.RefObject<HTMLDivElement | null>) {
       container.appendChild(el)
       elements.push(el)
       particles.push({
-        x: Math.random() * w,
-        y: Math.random() * h,
+        x: Math.random() * w, y: Math.random() * h,
         vy: -(0.12 + Math.random() * 0.35) * opts.speed,
         amp: 20 + Math.random() * 70,
         freq: 0.0004 + Math.random() * 0.0009,
@@ -231,14 +236,11 @@ function useParticles(containerRef: React.RefObject<HTMLDivElement | null>) {
         opacityAmp: 0.15 + Math.random() * 0.35,
         opacityFreq: 0.0008 + Math.random() * 0.0018,
         opacityPhase: Math.random() * Math.PI * 2,
-        depth: 0.3 + Math.random() * 0.7,
-        size,
+        depth: 0.3 + Math.random() * 0.7, size,
         twinkle: Math.random() * Math.PI * 2,
         twinkleFreq: 0.002 + Math.random() * 0.004
       })
     }
-    particlesRef.current = particles
-    elementsRef.current = elements
 
     const loop = (time: number) => {
       let dt = time - lastTimeRef.current
@@ -262,7 +264,6 @@ function useParticles(containerRef: React.RefObject<HTMLDivElement | null>) {
         if (p.x < -20) p.x = w + 20
         if (p.x > w + 20) p.x = -20
 
-        // Twinkle effect (parpadeo sutil)
         const twinkle = 0.6 + Math.sin(now * p.twinkleFreq + p.twinkle) * 0.4
         const opacity = (p.baseOpacity + Math.sin(now * p.opacityFreq + p.opacityPhase) * p.opacityAmp) * twinkle
         const clampedOpacity = Math.max(0, Math.min(1, opacity))
@@ -282,7 +283,7 @@ function useParticles(containerRef: React.RefObject<HTMLDivElement | null>) {
 }
 
 // ============================================================
-// CSS premium con mejoras significativas
+// CSS
 // ============================================================
 const ANIMATION_CSS = `
 @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;0,700;1,300;1,400;1,500&family=Inter:wght@200;300;400;500&display=swap');
@@ -290,9 +291,7 @@ const ANIMATION_CSS = `
 * { box-sizing: border-box; }
 
 html, body {
-  margin: 0;
-  padding: 0;
-  overflow: hidden;
+  margin: 0; padding: 0; overflow: hidden;
   background: #050505;
   font-family: 'Cormorant Garamond', serif;
   color: #F5EFE0;
@@ -300,46 +299,26 @@ html, body {
 }
 
 .np-stage {
-  position: fixed;
-  inset: 0;
-  background:
-    radial-gradient(ellipse 80% 60% at 50% 50%, #1a1410 0%, #0a0707 55%, #000 100%);
-  overflow: hidden;
-  perspective: 1500px;
+  position: fixed; inset: 0;
+  background: radial-gradient(ellipse 80% 60% at 50% 50%, #1a1410 0%, #0a0707 55%, #000 100%);
+  overflow: hidden; perspective: 1500px;
 }
 
-/* === Capas decorativas === */
-.np-particles {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  z-index: 1;
-}
+.np-particles { position: absolute; inset: 0; pointer-events: none; z-index: 1; }
 .np-particle {
-  position: absolute;
-  border-radius: 50%;
+  position: absolute; border-radius: 50%;
   background: #D4AF37;
-  box-shadow:
-    0 0 4px #D4AF37,
-    0 0 10px rgba(212,175,55,0.5),
-    0 0 20px rgba(212,175,55,0.2);
-  pointer-events: none;
-  will-change: transform, opacity;
+  box-shadow: 0 0 4px #D4AF37, 0 0 10px rgba(212,175,55,0.5), 0 0 20px rgba(212,175,55,0.2);
+  pointer-events: none; will-change: transform, opacity;
 }
 
-/* Aurora sutil de fondo */
 .np-aurora {
-  position: absolute;
-  inset: -10%;
-  pointer-events: none;
-  z-index: 0;
-  opacity: 0.4;
+  position: absolute; inset: -10%; pointer-events: none; z-index: 0; opacity: 0.4;
   background:
     radial-gradient(circle at 20% 30%, rgba(212,175,55,0.08) 0%, transparent 35%),
     radial-gradient(circle at 80% 70%, rgba(180,140,90,0.06) 0%, transparent 40%),
     radial-gradient(circle at 50% 50%, rgba(212,175,55,0.04) 0%, transparent 50%);
-  animation: npAurora 25s ease-in-out infinite;
-  filter: blur(40px);
+  animation: npAurora 25s ease-in-out infinite; filter: blur(40px);
 }
 @keyframes npAurora {
   0%, 100% { transform: translate(0, 0) rotate(0deg) scale(1); }
@@ -348,417 +327,395 @@ html, body {
 }
 
 .np-vignette {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  z-index: 50;
-  background: radial-gradient(ellipse at center,
-    transparent 25%,
-    rgba(0,0,0,0.35) 65%,
-    rgba(0,0,0,0.8) 100%);
+  position: absolute; inset: 0; pointer-events: none; z-index: 50;
+  background: radial-gradient(ellipse at center, transparent 25%, rgba(0,0,0,0.35) 65%, rgba(0,0,0,0.8) 100%);
 }
 
 .np-grain {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  z-index: 49;
-  opacity: 0.05;
-  mix-blend-mode: overlay;
+  position: absolute; inset: 0; pointer-events: none; z-index: 49;
+  opacity: 0.05; mix-blend-mode: overlay;
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 
-/* === Escenas === */
 .np-scene {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  opacity: 0;
-  z-index: 2;
-  pointer-events: none;
-  will-change: opacity, transform;
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  opacity: 0; z-index: 2; pointer-events: none; will-change: opacity, transform;
 }
 .np-scene-active { z-index: 3; }
 
 /* === Escena Logo === */
 .np-scene-logo { flex-direction: column; gap: 0; }
-
 .np-logo-container {
-  position: relative;
-  width: min(900px, 50vw);
-  height: auto;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  perspective: 1200px;
-  transform-style: preserve-3d;
+  position: relative; width: min(900px, 50vw); height: auto;
+  display: flex; align-items: center; justify-content: center;
+  perspective: 1200px; transform-style: preserve-3d;
 }
 .np-logo-img {
-  width: 100%;
-  height: auto;
-  object-fit: contain;
-  filter:
-    drop-shadow(0 0 30px rgba(212, 175, 55, 0.35))
-    drop-shadow(0 0 60px rgba(212, 175, 55, 0.15));
+  width: 100%; height: auto; object-fit: contain;
+  filter: drop-shadow(0 0 30px rgba(212, 175, 55, 0.35)) drop-shadow(0 0 60px rgba(212, 175, 55, 0.15));
 }
-
-/* Anillos decorativos que rotan */
 .np-logo-rings {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  pointer-events: none;
-  z-index: -1;
+  position: absolute; top: 50%; left: 50%;
+  transform: translate(-50%, -50%); pointer-events: none; z-index: -1;
 }
 .np-logo-ring {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  border: 1px solid rgba(212,175,55,0.3);
-  border-radius: 50%;
+  position: absolute; top: 50%; left: 50%;
+  border: 1px solid rgba(212,175,55,0.3); border-radius: 50%;
   transform: translate(-50%, -50%);
 }
 .np-logo-ring-rotating {
-  border-style: dashed;
-  border-color: rgba(212,175,55,0.2);
+  border-style: dashed; border-color: rgba(212,175,55,0.2);
   animation: npRingRotate 60s linear infinite;
 }
 @keyframes npRingRotate {
   from { transform: translate(-50%, -50%) rotate(0deg); }
   to { transform: translate(-50%, -50%) rotate(360deg); }
 }
-
-/* Brillo que recorre el logo */
 .np-logo-shine {
-  position: absolute;
-  top: 0;
-  left: -100%;
-  width: 60%;
-  height: 100%;
-  background: linear-gradient(105deg,
-    transparent 30%,
-    rgba(212,175,55,0) 40%,
-    rgba(212,175,55,0.35) 50%,
-    rgba(255,225,150,0.65) 55%,
-    rgba(212,175,55,0.35) 60%,
-    rgba(212,175,55,0) 70%,
-    transparent 80%);
-  transform: skewX(-15deg);
-  pointer-events: none;
-  mix-blend-mode: screen;
+  position: absolute; top: 0; left: -100%; width: 60%; height: 100%;
+  background: linear-gradient(105deg, transparent 30%, rgba(212,175,55,0) 40%, rgba(212,175,55,0.35) 50%, rgba(255,225,150,0.65) 55%, rgba(212,175,55,0.35) 60%, rgba(212,175,55,0) 70%, transparent 80%);
+  transform: skewX(-15deg); pointer-events: none; mix-blend-mode: screen;
 }
-
-/* Texto bajo el logo */
-.np-logo-text {
-  margin-top: 50px;
-  text-align: center;
-  position: relative;
-}
+.np-logo-text { margin-top: 50px; text-align: center; position: relative; }
 .np-logo-title {
   font-family: 'Cormorant Garamond', serif;
-  font-size: clamp(28px, 3vw, 52px);
-  font-weight: 300;
-  letter-spacing: 0.6em;
-  color: #D4AF37;
-  text-transform: uppercase;
-  text-shadow:
-    0 0 20px rgba(212,175,55,0.5),
-    0 0 40px rgba(212,175,55,0.2);
-  margin-left: 0.6em;
+  font-size: clamp(28px, 3vw, 52px); font-weight: 300; letter-spacing: 0.6em;
+  text-transform: uppercase; margin-left: 0.6em;
+  text-shadow: 0 0 20px rgba(212,175,55,0.5), 0 0 40px rgba(212,175,55,0.2);
   background: linear-gradient(180deg, #F5D880 0%, #D4AF37 50%, #A8862A 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
+  -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
 }
 .np-logo-subtitle {
-  margin-top: 28px;
-  font-family: 'Cormorant Garamond', serif;
-  font-size: clamp(22px, 2.2vw, 38px);
-  letter-spacing: 0.4em;
-  color: #F5EFE0;
-  font-style: italic;
-  font-weight: 300;
-  margin-left: 0.4em;
+  margin-top: 28px; font-family: 'Cormorant Garamond', serif;
+  font-size: clamp(22px, 2.2vw, 38px); letter-spacing: 0.4em;
+  color: #F5EFE0; font-style: italic; font-weight: 300; margin-left: 0.4em;
 }
 .np-logo-ornament {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 16px;
-  margin-top: 28px;
-  opacity: 0.7;
+  display: flex; align-items: center; justify-content: center;
+  gap: 16px; margin-top: 28px; opacity: 0.7;
 }
-.np-logo-ornament .line {
-  width: 60px;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, #D4AF37, transparent);
-}
-.np-logo-ornament .diamond {
-  width: 6px;
-  height: 6px;
-  background: #D4AF37;
-  transform: rotate(45deg);
-  box-shadow: 0 0 8px #D4AF37;
-}
+.np-logo-ornament .line { width: 60px; height: 1px; background: linear-gradient(90deg, transparent, #D4AF37, transparent); }
+.np-logo-ornament .diamond { width: 6px; height: 6px; background: #D4AF37; transform: rotate(45deg); box-shadow: 0 0 8px #D4AF37; }
 
-/* === Escenas de fotos === */
-.np-photo-scene { flex-direction: column; }
-.np-photo-frame {
-  position: absolute;
-  inset: 0;
-  overflow: hidden;
-}
-.np-photo-img {
-  position: absolute;
-  inset: -10%;
-  width: 120%;
-  height: 120%;
-  object-fit: cover;
-  will-change: transform;
+/* === Escenas de media (foto/video) === */
+.np-media-scene { flex-direction: column; }
+.np-media-frame { position: absolute; inset: 0; overflow: hidden; }
+.np-media-img, .np-media-video {
+  position: absolute; inset: -10%; width: 120%; height: 120%;
+  object-fit: cover; will-change: transform;
   filter: brightness(0.82) contrast(1.08) saturate(0.92);
 }
-
-/* Overlay con doble gradiente para legibilidad premium */
-.np-photo-overlay {
-  position: absolute;
-  inset: 0;
+.np-media-video {
+  inset: 0; width: 100%; height: 100%;
+}
+.np-media-overlay {
+  position: absolute; inset: 0;
   background:
-    linear-gradient(to bottom,
-      rgba(0,0,0,0.4) 0%,
-      rgba(0,0,0,0) 25%,
-      rgba(0,0,0,0) 55%,
-      rgba(0,0,0,0.5) 80%,
-      rgba(0,0,0,0.85) 100%),
-    linear-gradient(to right,
-      rgba(0,0,0,0.25) 0%,
-      rgba(0,0,0,0) 30%,
-      rgba(0,0,0,0) 70%,
-      rgba(0,0,0,0.25) 100%);
-  pointer-events: none;
-  z-index: 2;
+    linear-gradient(to bottom, rgba(0,0,0,0.4) 0%, rgba(0,0,0,0) 25%, rgba(0,0,0,0) 55%, rgba(0,0,0,0.5) 80%, rgba(0,0,0,0.85) 100%),
+    linear-gradient(to right, rgba(0,0,0,0.25) 0%, rgba(0,0,0,0) 30%, rgba(0,0,0,0) 70%, rgba(0,0,0,0.25) 100%);
+  pointer-events: none; z-index: 2;
 }
-
-/* Marco dorado elegante */
-.np-photo-border {
-  position: absolute;
-  top: 5vh;
-  left: 5vw;
-  right: 5vw;
-  bottom: 5vh;
+.np-media-border {
+  position: absolute; top: 5vh; left: 5vw; right: 5vw; bottom: 5vh;
   border: 1px solid rgba(212,175,55,0.35);
-  pointer-events: none;
-  z-index: 5;
-  box-shadow:
-    inset 0 0 0 1px rgba(0,0,0,0.3),
-    inset 0 0 100px rgba(0,0,0,0.5),
-    inset 0 0 200px rgba(0,0,0,0.3);
+  pointer-events: none; z-index: 5;
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,0.3), inset 0 0 100px rgba(0,0,0,0.5), inset 0 0 200px rgba(0,0,0,0.3);
 }
-.np-photo-border::before,
-.np-photo-border::after,
-.np-photo-border .corner-tr,
-.np-photo-border .corner-bl {
-  content: '';
-  position: absolute;
-  width: 70px;
-  height: 70px;
-  border: 2px solid #D4AF37;
-  filter: drop-shadow(0 0 4px rgba(212,175,55,0.5));
+.np-media-border::before, .np-media-border::after,
+.np-media-border .corner-tr, .np-media-border .corner-bl {
+  content: ''; position: absolute; width: 70px; height: 70px;
+  border: 2px solid #D4AF37; filter: drop-shadow(0 0 4px rgba(212,175,55,0.5));
 }
-.np-photo-border::before { top: -2px; left: -2px; border-right: none; border-bottom: none; }
-.np-photo-border::after { bottom: -2px; right: -2px; border-left: none; border-top: none; }
-.np-photo-border .corner-tr { top: -2px; right: -2px; border-left: none; border-bottom: none; }
-.np-photo-border .corner-bl { bottom: -2px; left: -2px; border-right: none; border-top: none; }
+.np-media-border::before { top: -2px; left: -2px; border-right: none; border-bottom: none; }
+.np-media-border::after { bottom: -2px; right: -2px; border-left: none; border-top: none; }
+.np-media-border .corner-tr { top: -2px; right: -2px; border-left: none; border-bottom: none; }
+.np-media-border .corner-bl { bottom: -2px; left: -2px; border-right: none; border-top: none; }
 
-/* Caption centrado */
-.np-photo-caption {
-  position: absolute;
-  bottom: 14vh;
-  left: 50%;
-  transform: translateX(-50%);
-  text-align: center;
-  z-index: 6;
-  white-space: nowrap;
+.np-media-caption {
+  position: absolute; bottom: 14vh; left: 50%;
+  transform: translateX(-50%); text-align: center; z-index: 6; white-space: nowrap;
 }
-.np-photo-caption .divider {
-  display: inline-block;
-  width: 70px;
-  height: 1px;
+.np-media-caption .divider {
+  display: inline-block; width: 70px; height: 1px;
   background: linear-gradient(90deg, transparent, #D4AF37, transparent);
-  vertical-align: middle;
-  margin: 0 30px;
+  vertical-align: middle; margin: 0 30px;
 }
-.np-photo-caption .text {
-  display: inline-block;
-  font-family: 'Cormorant Garamond', serif;
-  font-size: clamp(26px, 2.6vw, 48px);
-  letter-spacing: 0.45em;
-  color: #D4AF37;
-  text-transform: uppercase;
-  vertical-align: middle;
-  text-shadow:
-    0 0 30px rgba(0,0,0,0.95),
-    0 2px 8px rgba(0,0,0,0.8),
-    0 0 20px rgba(212,175,55,0.3);
+.np-media-caption .text {
+  display: inline-block; font-family: 'Cormorant Garamond', serif;
+  font-size: clamp(26px, 2.6vw, 48px); letter-spacing: 0.45em;
+  text-transform: uppercase; vertical-align: middle;
+  text-shadow: 0 0 30px rgba(0,0,0,0.95), 0 2px 8px rgba(0,0,0,0.8), 0 0 20px rgba(212,175,55,0.3);
   margin-left: 0.45em;
   background: linear-gradient(180deg, #F5D880 0%, #D4AF37 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
+  -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
   font-weight: 400;
 }
 
 /* === Escena Final === */
 .np-scene-final { flex-direction: column; }
 .np-final-logo {
-  width: min(500px, 35vw);
-  height: auto;
-  object-fit: contain;
-  filter:
-    drop-shadow(0 0 40px rgba(212, 175, 55, 0.5))
-    drop-shadow(0 0 80px rgba(212, 175, 55, 0.2));
+  width: min(500px, 35vw); height: auto; object-fit: contain;
+  filter: drop-shadow(0 0 40px rgba(212, 175, 55, 0.5)) drop-shadow(0 0 80px rgba(212, 175, 55, 0.2));
 }
 .np-final-phrase {
-  margin-top: 60px;
-  font-family: 'Cormorant Garamond', serif;
-  font-size: clamp(38px, 4.2vw, 68px);
-  font-style: italic;
-  font-weight: 400;
-  color: #D4AF37;
-  text-shadow: 0 0 30px rgba(212,175,55,0.5);
-  text-align: center;
-  letter-spacing: 0.02em;
+  margin-top: 60px; font-family: 'Cormorant Garamond', serif;
+  font-size: clamp(38px, 4.2vw, 68px); font-style: italic; font-weight: 400;
+  text-shadow: 0 0 30px rgba(212,175,55,0.5); text-align: center; letter-spacing: 0.02em;
   background: linear-gradient(180deg, #F5D880 0%, #D4AF37 50%, #A8862A 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
+  -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
 }
 .np-final-signature {
-  margin-top: 32px;
-  font-family: 'Cormorant Garamond', serif;
-  font-size: clamp(22px, 2vw, 34px);
-  letter-spacing: 0.7em;
-  color: #F5EFE0;
-  text-transform: uppercase;
-  margin-left: 0.7em;
-  font-weight: 300;
+  margin-top: 32px; font-family: 'Cormorant Garamond', serif;
+  font-size: clamp(22px, 2vw, 34px); letter-spacing: 0.7em;
+  color: #F5EFE0; text-transform: uppercase; margin-left: 0.7em; font-weight: 300;
 }
 .np-final-closing {
-  margin-top: 60px;
-  font-family: 'Inter', sans-serif;
-  font-size: clamp(11px, 0.9vw, 13px);
-  letter-spacing: 0.6em;
-  color: rgba(245,239,224,0.5);
-  text-transform: uppercase;
-  margin-left: 0.6em;
-  font-weight: 300;
+  margin-top: 60px; font-family: 'Inter', sans-serif;
+  font-size: clamp(11px, 0.9vw, 13px); letter-spacing: 0.6em;
+  color: rgba(245,239,224,0.5); text-transform: uppercase; margin-left: 0.6em; font-weight: 300;
 }
 .np-final-ornament {
-  margin-top: 40px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 20px;
-  opacity: 0.6;
+  margin-top: 40px; display: flex; align-items: center; justify-content: center;
+  gap: 20px; opacity: 0.6;
 }
-.np-final-ornament .line {
-  width: 80px;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, #D4AF37, transparent);
+.np-final-ornament .line { width: 80px; height: 1px; background: linear-gradient(90deg, transparent, #D4AF37, transparent); }
+.np-final-ornament .diamond { width: 8px; height: 8px; background: #D4AF37; transform: rotate(45deg); box-shadow: 0 0 10px #D4AF37; }
+
+/* === Botón de Upload === */
+.np-upload-btn {
+  position: fixed; top: 24px; right: 24px; z-index: 101;
+  width: 56px; height: 56px; border-radius: 50%;
+  background: rgba(0, 0, 0, 0.6);
+  border: 1px solid rgba(212, 175, 55, 0.5);
+  color: #D4AF37; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 28px; font-family: 'Inter', sans-serif; font-weight: 200;
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  transition: all 0.3s ease;
+  opacity: 0.4;
 }
-.np-final-ornament .diamond {
-  width: 8px;
-  height: 8px;
-  background: #D4AF37;
-  transform: rotate(45deg);
-  box-shadow: 0 0 10px #D4AF37;
+.np-upload-btn:hover {
+  opacity: 1;
+  background: rgba(212, 175, 55, 0.2);
+  border-color: #D4AF37;
+  transform: scale(1.05);
+  box-shadow: 0 0 20px rgba(212, 175, 55, 0.4);
 }
+.np-upload-btn.uploading {
+  animation: npPulse 1s ease-in-out infinite;
+}
+@keyframes npPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(212, 175, 55, 0.5); }
+  50% { box-shadow: 0 0 0 15px rgba(212, 175, 55, 0); }
+}
+
+/* === Modal de gestión de archivos === */
+.np-modal-backdrop {
+  position: fixed; inset: 0; z-index: 200;
+  background: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0; transition: opacity 0.3s; pointer-events: none;
+}
+.np-modal-backdrop.np-visible { opacity: 1; pointer-events: auto; }
+.np-modal {
+  background: linear-gradient(180deg, #1a1410 0%, #0a0707 100%);
+  border: 1px solid rgba(212, 175, 55, 0.4);
+  border-radius: 16px;
+  padding: 32px;
+  max-width: 720px; width: 90vw;
+  max-height: 85vh; overflow-y: auto;
+  font-family: 'Inter', sans-serif;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.8), 0 0 60px rgba(212,175,55,0.15);
+}
+.np-modal h2 {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 32px; font-weight: 400; color: #D4AF37;
+  margin: 0 0 8px 0; letter-spacing: 0.05em;
+  background: linear-gradient(180deg, #F5D880 0%, #D4AF37 100%);
+  -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+}
+.np-modal .subtitle {
+  color: rgba(245,239,224,0.6); font-size: 14px; margin-bottom: 24px;
+  letter-spacing: 0.05em;
+}
+.np-modal .stats {
+  display: flex; gap: 16px; margin-bottom: 24px;
+  padding: 16px; background: rgba(0,0,0,0.4); border-radius: 8px;
+  border: 1px solid rgba(212,175,55,0.15);
+}
+.np-modal .stat {
+  flex: 1; text-align: center;
+}
+.np-modal .stat .num {
+  font-size: 28px; color: #D4AF37; font-weight: 500;
+  font-family: 'Cormorant Garamond', serif;
+}
+.np-modal .stat .label {
+  font-size: 11px; color: rgba(245,239,224,0.5);
+  text-transform: uppercase; letter-spacing: 0.2em; margin-top: 4px;
+}
+.np-dropzone {
+  border: 2px dashed rgba(212, 175, 55, 0.4);
+  border-radius: 12px;
+  padding: 40px 20px;
+  text-align: center;
+  transition: all 0.3s;
+  cursor: pointer;
+  margin-bottom: 20px;
+  background: rgba(212, 175, 55, 0.03);
+}
+.np-dropzone:hover, .np-dropzone.dragover {
+  border-color: #D4AF37;
+  background: rgba(212, 175, 55, 0.1);
+  transform: scale(1.01);
+}
+.np-dropzone .icon {
+  font-size: 48px; color: #D4AF37; margin-bottom: 12px;
+  font-weight: 200; line-height: 1;
+}
+.np-dropzone .text {
+  color: #F5EFE0; font-size: 16px; margin-bottom: 4px;
+}
+.np-dropzone .hint {
+  color: rgba(245,239,224,0.5); font-size: 12px;
+}
+.np-file-list {
+  margin-top: 20px;
+  max-height: 280px; overflow-y: auto;
+  border-radius: 8px;
+  border: 1px solid rgba(212,175,55,0.15);
+}
+.np-file-item {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid rgba(212,175,55,0.08);
+  transition: background 0.2s;
+}
+.np-file-item:last-child { border-bottom: none; }
+.np-file-item:hover { background: rgba(212, 175, 55, 0.05); }
+.np-file-item .thumb {
+  width: 50px; height: 36px; border-radius: 4px;
+  object-fit: cover;
+  background: rgba(212,175,55,0.1);
+  border: 1px solid rgba(212,175,55,0.2);
+}
+.np-file-item .info { flex: 1; min-width: 0; }
+.np-file-item .name {
+  color: #F5EFE0; font-size: 13px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.np-file-item .meta {
+  color: rgba(245,239,224,0.5); font-size: 11px; margin-top: 2px;
+}
+.np-file-item .badge {
+  display: inline-block; padding: 2px 8px; border-radius: 10px;
+  font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase;
+  background: rgba(212, 175, 55, 0.15); color: #D4AF37;
+  border: 1px solid rgba(212, 175, 55, 0.3);
+}
+.np-file-item .badge.video {
+  background: rgba(180, 80, 80, 0.15); color: #ffaaaa;
+  border-color: rgba(180, 80, 80, 0.3);
+}
+.np-file-item .delete-btn {
+  background: transparent; border: none; color: rgba(245,239,224,0.4);
+  cursor: pointer; padding: 6px 10px; border-radius: 4px;
+  font-size: 18px; transition: all 0.2s;
+}
+.np-file-item .delete-btn:hover {
+  color: #ff6666; background: rgba(255, 100, 100, 0.1);
+}
+.np-modal .actions {
+  display: flex; gap: 12px; margin-top: 24px; justify-content: flex-end;
+}
+.np-modal .btn {
+  padding: 10px 20px; border-radius: 6px;
+  font-family: 'Inter', sans-serif; font-size: 13px;
+  cursor: pointer; transition: all 0.2s;
+  border: 1px solid rgba(212, 175, 55, 0.4);
+  background: transparent; color: #F5EFE0;
+  letter-spacing: 0.1em; text-transform: uppercase;
+}
+.np-modal .btn:hover {
+  background: rgba(212, 175, 55, 0.1);
+  border-color: #D4AF37;
+}
+.np-modal .btn.primary {
+  background: linear-gradient(180deg, #D4AF37 0%, #A8862A 100%);
+  color: #0a0707; border-color: #D4AF37; font-weight: 500;
+}
+.np-modal .btn.primary:hover {
+  box-shadow: 0 0 20px rgba(212, 175, 55, 0.5);
+}
+.np-modal .btn:disabled {
+  opacity: 0.4; cursor: not-allowed;
+}
+.np-toast {
+  position: fixed; bottom: 30px; left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  background: rgba(0,0,0,0.9);
+  border: 1px solid #D4AF37;
+  color: #F5EFE0; padding: 12px 24px;
+  border-radius: 8px;
+  font-family: 'Inter', sans-serif; font-size: 13px;
+  z-index: 300; opacity: 0;
+  transition: all 0.3s; pointer-events: none;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+}
+.np-toast.visible {
+  opacity: 1; transform: translateX(-50%) translateY(0);
+}
+.np-toast.error { border-color: #ff6666; color: #ffaaaa; }
+.np-toast.success { border-color: #D4AF37; }
 
 /* === HUD === */
 .np-hud {
-  position: fixed;
-  bottom: 20px;
-  left: 20px;
-  z-index: 100;
-  font-family: 'Inter', sans-serif;
-  font-size: 11px;
+  position: fixed; bottom: 20px; left: 20px; z-index: 100;
+  font-family: 'Inter', sans-serif; font-size: 11px;
   color: rgba(245,239,224,0.7);
   background: rgba(0, 0, 0, 0.75);
-  padding: 14px 18px;
-  border-radius: 10px;
+  padding: 14px 18px; border-radius: 10px;
   border: 1px solid rgba(212, 175, 55, 0.25);
-  opacity: 0;
-  transition: opacity 0.3s;
+  opacity: 0; transition: opacity 0.3s;
   pointer-events: none;
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
 }
 .np-hud.np-visible { opacity: 1; pointer-events: auto; }
 .np-hud h4 {
-  color: #D4AF37;
-  font-size: 10px;
-  letter-spacing: 0.35em;
-  text-transform: uppercase;
-  margin: 0 0 10px 0;
-  font-weight: 500;
+  color: #D4AF37; font-size: 10px; letter-spacing: 0.35em;
+  text-transform: uppercase; margin: 0 0 10px 0; font-weight: 500;
 }
 .np-hud kbd {
-  display: inline-block;
-  padding: 2px 7px;
+  display: inline-block; padding: 2px 7px;
   background: rgba(212, 175, 55, 0.15);
   border: 1px solid rgba(212, 175, 55, 0.4);
-  border-radius: 3px;
-  font-family: 'SF Mono', Monaco, monospace;
-  font-size: 10px;
-  color: #F5EFE0;
-  margin-right: 6px;
+  border-radius: 3px; font-family: 'SF Mono', Monaco, monospace;
+  font-size: 10px; color: #F5EFE0; margin-right: 6px;
 }
 .np-hud .row { margin: 5px 0; }
 .np-hud .scene-info {
-  margin-top: 12px;
-  padding-top: 12px;
+  margin-top: 12px; padding-top: 12px;
   border-top: 1px solid rgba(212, 175, 55, 0.15);
-  font-size: 12px;
-  color: #F5EFE0;
+  font-size: 12px; color: #F5EFE0;
 }
 .np-hud .scene-info .label {
-  color: rgba(245,239,224,0.5);
-  margin-right: 8px;
+  color: rgba(245,239,224,0.5); margin-right: 8px;
 }
 
-/* === Barra de progreso === */
 .np-progress-bar {
-  position: fixed;
-  top: 0;
-  left: 0;
-  height: 2px;
-  background: linear-gradient(90deg,
-    transparent 0%,
-    rgba(212,175,55,0.4) 20%,
-    #D4AF37 50%,
-    rgba(212,175,55,0.4) 80%,
-    transparent 100%);
-  z-index: 99;
-  width: 0%;
-  opacity: 0;
-  transition: opacity 0.3s;
-  box-shadow: 0 0 8px rgba(212,175,55,0.5);
+  position: fixed; top: 0; left: 0; height: 2px;
+  background: linear-gradient(90deg, transparent 0%, rgba(212,175,55,0.4) 20%, #D4AF37 50%, rgba(212,175,55,0.4) 80%, transparent 100%);
+  z-index: 99; width: 0%; opacity: 0;
+  transition: opacity 0.3s; box-shadow: 0 0 8px rgba(212,175,55,0.5);
 }
 .np-progress-bar.np-visible { opacity: 0.9; }
 
-/* === Cursor personalizado === */
 .np-cursor {
-  position: fixed;
-  width: 14px;
-  height: 14px;
-  border: 1px solid rgba(212,175,55,0.5);
-  border-radius: 50%;
-  pointer-events: none;
-  z-index: 200;
-  transform: translate(-50%, -50%);
-  opacity: 0;
+  position: fixed; width: 14px; height: 14px;
+  border: 1px solid rgba(212,175,55,0.5); border-radius: 50%;
+  pointer-events: none; z-index: 200;
+  transform: translate(-50%, -50%); opacity: 0;
   transition: opacity 0.3s, width 0.2s, height 0.2s;
   mix-blend-mode: difference;
 }
@@ -766,25 +723,10 @@ html, body {
 
 /* === Keyframes === */
 @keyframes npLogoAppear {
-  0% {
-    opacity: 0;
-    transform: scale(0.82) translateY(30px) rotateX(15deg);
-    filter: blur(20px) drop-shadow(0 0 0 rgba(212, 175, 55, 0));
-  }
-  40% {
-    opacity: 0.4;
-    filter: blur(8px) drop-shadow(0 0 20px rgba(212, 175, 55, 0.2));
-  }
-  75% {
-    opacity: 0.9;
-    transform: scale(1.03) translateY(-5px) rotateX(-3deg);
-    filter: blur(0) drop-shadow(0 0 30px rgba(212, 175, 55, 0.3));
-  }
-  100% {
-    opacity: 1;
-    transform: scale(1) translateY(0) rotateX(0);
-    filter: blur(0) drop-shadow(0 0 30px rgba(212, 175, 55, 0.35));
-  }
+  0% { opacity: 0; transform: scale(0.82) translateY(30px) rotateX(15deg); filter: blur(20px) drop-shadow(0 0 0 rgba(212, 175, 55, 0)); }
+  40% { opacity: 0.4; filter: blur(8px) drop-shadow(0 0 20px rgba(212, 175, 55, 0.2)); }
+  75% { opacity: 0.9; transform: scale(1.03) translateY(-5px) rotateX(-3deg); filter: blur(0) drop-shadow(0 0 30px rgba(212, 175, 55, 0.3)); }
+  100% { opacity: 1; transform: scale(1) translateY(0) rotateX(0); filter: blur(0) drop-shadow(0 0 30px rgba(212, 175, 55, 0.35)); }
 }
 @keyframes npShineSweep {
   0% { left: -100%; opacity: 0; }
@@ -807,7 +749,6 @@ html, body {
   100% { opacity: 0.7; transform: translateY(0) scaleX(1); }
 }
 
-/* Variaciones de Ken Burns más cinematográficas */
 @keyframes npKenBurnsA {
   0% { transform: scale(1.0) translate(0, 0); filter: brightness(0.7); }
   30% { filter: brightness(0.85); }
@@ -833,53 +774,24 @@ html, body {
 }
 
 @keyframes npCaptionRise {
-  0% {
-    opacity: 0;
-    transform: translate(-50%, 40px);
-    filter: blur(12px);
-    letter-spacing: 0.6em;
-  }
-  60% {
-    opacity: 0.9;
-    filter: blur(2px);
-    letter-spacing: 0.5em;
-  }
-  100% {
-    opacity: 1;
-    transform: translate(-50%, 0);
-    filter: blur(0);
-    letter-spacing: 0.45em;
-  }
+  0% { opacity: 0; transform: translate(-50%, 40px); filter: blur(12px); letter-spacing: 0.6em; }
+  60% { opacity: 0.9; filter: blur(2px); letter-spacing: 0.5em; }
+  100% { opacity: 1; transform: translate(-50%, 0); filter: blur(0); letter-spacing: 0.45em; }
 }
 
 @keyframes npFinalLogoIn {
-  0% {
-    opacity: 0;
-    transform: scale(0.88) translateY(30px) rotateY(10deg);
-    filter: blur(15px);
-  }
-  60% {
-    opacity: 0.85;
-    filter: blur(3px);
-  }
-  100% {
-    opacity: 1;
-    transform: scale(1) translateY(0) rotateY(0);
-    filter: blur(0);
-  }
+  0% { opacity: 0; transform: scale(0.88) translateY(30px) rotateY(10deg); filter: blur(15px); }
+  60% { opacity: 0.85; filter: blur(3px); }
+  100% { opacity: 1; transform: scale(1) translateY(0) rotateY(0); filter: blur(0); }
 }
 @keyframes npPhraseIn {
   0% { opacity: 0; transform: translateY(40px); filter: blur(8px); }
   100% { opacity: 1; transform: translateY(0); filter: blur(0); }
 }
 
-/* Respiración sutil del logo final */
 @keyframes npBreathe {
   0%, 100% { transform: scale(1); filter: drop-shadow(0 0 40px rgba(212,175,55,0.4)); }
   50% { transform: scale(1.02); filter: drop-shadow(0 0 60px rgba(212,175,55,0.6)); }
-}
-.np-final-logo-breathing {
-  animation: npBreathe 4s ease-in-out infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -896,18 +808,43 @@ html, body {
 export default function AnimacionPedida() {
   const particlesContainerRef = useRef<HTMLDivElement>(null)
   const sceneElementsRef = useRef<Record<string, HTMLDivElement | null>>({})
+  const videoElementsRef = useRef<Record<string, HTMLVideoElement | null>>({})
   const [hudVisible, setHudVisible] = useState(false)
   const [progress, setProgress] = useState(0)
   const [activeSceneInfo, setActiveSceneInfo] = useState<{id: string, type: string} | null>(null)
   const [cursorPos, setCursorPos] = useState({ x: 0, y: 0 })
+  const [galleryItems, setGalleryItems] = useState<GalleryItem[]>([])
+  const [modalVisible, setModalVisible] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Cargar galería al montar
+  const loadGallery = useCallback(async () => {
+    const data = await fetchGallery()
+    if (data.success) {
+      setGalleryItems(data.items)
+      console.log(`Galería cargada: ${data.count} archivos (${data.images} imágenes, ${data.videos} videos)`)
+    }
+  }, [])
+
+  useEffect(() => {
+    loadGallery()
+  }, [loadGallery])
 
   const {
     scenes, totalDuration, currentTime, currentSceneIndex,
     isPlaying, setIsPlaying, getOpacities, jumpToScene, seekTo,
     onSceneChangeRef
-  } = useTimeline()
+  } = useTimeline(galleryItems)
 
   useParticles(particlesContainerRef)
+
+  // Toast helper
+  const showToast = useCallback((message: string, type: 'success' | 'error' | 'info' = 'info') => {
+    setToast({ message, type })
+    setTimeout(() => setToast(null), 3500)
+  }, [])
 
   // Exponer estado globalmente
   useEffect(() => {
@@ -917,9 +854,11 @@ export default function AnimacionPedida() {
         seekTo, jumpToScene,
         play: () => setIsPlaying(true),
         pause: () => setIsPlaying(false)
-      }
+      },
+      gallery: galleryItems,
+      reloadGallery: loadGallery
     }
-  }, [currentTime, totalDuration, currentSceneIndex, isPlaying, scenes, seekTo, jumpToScene, setIsPlaying])
+  }, [currentTime, totalDuration, currentSceneIndex, isPlaying, scenes, seekTo, jumpToScene, setIsPlaying, galleryItems, loadGallery])
 
   // Cursor personalizado
   useEffect(() => {
@@ -938,15 +877,28 @@ export default function AnimacionPedida() {
     const el = sceneElementsRef.current[scene.id]
     if (!el) return
 
-    if (scene.type === 'photo') {
-      const img = el.querySelector('.np-photo-img') as HTMLImageElement
-      const caption = el.querySelector('.np-photo-caption') as HTMLElement
-      const variations = ['npKenBurnsA', 'npKenBurnsB', 'npKenBurnsC', 'npKenBurnsD', 'npKenBurnsE']
-      if (img) {
-        img.style.animation = 'none'
-        void img.offsetHeight
-        img.style.animation = `${variations[(scene.photoIndex || 0) % variations.length]} 8s ease-out forwards`
+    if (scene.type === 'photo' || scene.type === 'video') {
+      // Para video: reproducir
+      if (scene.type === 'video') {
+        const video = videoElementsRef.current[scene.id]
+        if (video) {
+          video.currentTime = 0
+          video.play().catch(() => {})
+        }
       }
+
+      // Para foto: aplicar Ken Burns
+      if (scene.type === 'photo') {
+        const img = el.querySelector('.np-media-img') as HTMLImageElement
+        const variations = ['npKenBurnsA', 'npKenBurnsB', 'npKenBurnsC', 'npKenBurnsD', 'npKenBurnsE']
+        if (img) {
+          img.style.animation = 'none'
+          void img.offsetHeight
+          img.style.animation = `${variations[(scene.mediaIndex || 0) % variations.length]} 8s ease-out forwards`
+        }
+      }
+
+      const caption = el.querySelector('.np-media-caption') as HTMLElement
       if (caption) {
         caption.style.animation = 'none'
         void caption.offsetHeight
@@ -1006,6 +958,18 @@ export default function AnimacionPedida() {
           el.classList.remove('np-scene-active')
         }
       }
+
+      // Pausar videos de escenas inactivas
+      if (scene.type === 'video') {
+        const video = videoElementsRef.current[scene.id]
+        if (video) {
+          if (opacity > 0.1) {
+            if (video.paused) video.play().catch(() => {})
+          } else {
+            if (!video.paused) video.pause()
+          }
+        }
+      }
     }
     setProgress((currentTime / totalDuration) * 100)
   }, [currentTime, getOpacities, totalDuration])
@@ -1015,6 +979,7 @@ export default function AnimacionPedida() {
     const handleKey = (e: KeyboardEvent) => {
       switch(e.key) {
         case '?': case '¿': setHudVisible(v => !v); break
+        case 'u': case 'U': setModalVisible(v => !v); break
         case ' ': e.preventDefault(); setIsPlaying(!isPlaying); break
         case 'f': case 'F':
           if (!document.fullscreenElement) {
@@ -1045,6 +1010,64 @@ export default function AnimacionPedida() {
     document.head.appendChild(style)
   }, [])
 
+  // Manejar upload
+  const handleFileSelect = useCallback(async (files: FileList | null) => {
+    if (!files || files.length === 0) return
+    setUploading(true)
+    try {
+      const result = await uploadFiles(Array.from(files))
+      if (result.success) {
+        showToast(`✓ ${result.uploaded?.length || 0} archivo(s) subido(s)`, 'success')
+        await loadGallery()
+      } else {
+        showToast(`Error: ${result.message}`, 'error')
+      }
+    } catch (err) {
+      showToast('Error al subir archivos', 'error')
+    } finally {
+      setUploading(false)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    }
+  }, [loadGallery, showToast])
+
+  // Drag and drop
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    e.currentTarget.classList.remove('dragover')
+    if (e.dataTransfer.files) {
+      handleFileSelect(e.dataTransfer.files)
+    }
+  }, [handleFileSelect])
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    e.currentTarget.classList.add('dragover')
+  }, [])
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    e.currentTarget.classList.remove('dragover')
+  }, [])
+
+  // Eliminar archivo
+  const handleDelete = useCallback(async (filename: string) => {
+    if (!confirm(`¿Eliminar "${filename}"?`)) return
+    const result = await deleteFile(filename)
+    if (result.success) {
+      showToast(`Eliminado: ${filename}`, 'success')
+      await loadGallery()
+    } else {
+      showToast(`Error: ${result.message}`, 'error')
+    }
+  }, [loadGallery, showToast])
+
+  // Stats de la galería
+  const imageCount = galleryItems.filter(i => i.type === 'image').length
+  const videoCount = galleryItems.filter(i => i.type === 'video').length
+
   return (
     <div className="np-stage">
       {/* Capas decorativas */}
@@ -1052,6 +1075,26 @@ export default function AnimacionPedida() {
       <div className="np-particles" ref={particlesContainerRef}></div>
       <div className="np-grain"></div>
       <div className="np-vignette"></div>
+
+      {/* Botón de Upload */}
+      <button
+        className={`np-upload-btn ${uploading ? 'uploading' : ''}`}
+        onClick={() => setModalVisible(true)}
+        title="Subir fotos y videos"
+        aria-label="Subir archivos"
+      >
+        +
+      </button>
+
+      {/* Input oculto para archivos */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        accept="image/*,video/*"
+        style={{ display: 'none' }}
+        onChange={(e) => handleFileSelect(e.target.files)}
+      />
 
       {/* Escena 1: Logo */}
       <div
@@ -1080,29 +1123,42 @@ export default function AnimacionPedida() {
         </div>
       </div>
 
-      {/* Escenas de fotos */}
-      {CONFIG.images.photos.map((photo, i) => {
-        const caption = CONFIG.texts.scenePhotos[i] || { caption: '' }
+      {/* Escenas dinámicas (fotos y videos) */}
+      {galleryItems.map((item, i) => {
+        const isVideo = item.type === 'video'
+        const sceneId = `scene-media-${i}`
         return (
           <div
-            key={`photo-${i}`}
-            className="np-scene np-photo-scene"
-            id={`scene-photo-${i}`}
-            ref={el => { sceneElementsRef.current[`scene-photo-${i}`] = el }}
+            key={`media-${i}`}
+            className="np-scene np-media-scene"
+            id={sceneId}
+            ref={el => { sceneElementsRef.current[sceneId] = el }}
           >
-            <div className="np-photo-frame">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img className="np-photo-img" src={photo} alt={`Foto ${i+1}`} />
-              <div className="np-photo-overlay"></div>
+            <div className="np-media-frame">
+              {isVideo ? (
+                <video
+                  ref={el => { videoElementsRef.current[sceneId] = el }}
+                  className="np-media-video"
+                  src={item.path}
+                  muted
+                  loop
+                  playsInline
+                  preload="auto"
+                />
+              ) : (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img className="np-media-img" src={item.path} alt={item.caption || `Foto ${i+1}`} />
+              )}
+              <div className="np-media-overlay"></div>
             </div>
-            <div className="np-photo-border">
+            <div className="np-media-border">
               <div className="corner-tr"></div>
               <div className="corner-bl"></div>
             </div>
-            {caption.caption && (
-              <div className="np-photo-caption">
+            {item.caption && (
+              <div className="np-media-caption">
                 <span className="divider"></span>
-                <span className="text">{caption.caption}</span>
+                <span className="text">{item.caption}</span>
                 <span className="divider"></span>
               </div>
             )}
@@ -1148,15 +1204,113 @@ export default function AnimacionPedida() {
         <div className="row"><kbd>Space</kbd> {isPlaying ? 'Pausa' : 'Play'}</div>
         <div className="row"><kbd>←</kbd> <kbd>→</kbd> Escena anterior / siguiente</div>
         <div className="row"><kbd>1</kbd>-<kbd>9</kbd> Saltar a escena</div>
+        <div className="row"><kbd>U</kbd> Subir archivos</div>
         <div className="row"><kbd>R</kbd> Reiniciar</div>
         <div className="row"><kbd>F</kbd> Pantalla completa</div>
         <div className="row"><kbd>?</kbd> Ocultar este panel</div>
         <div className="scene-info">
           <div><span className="label">Tiempo:</span> {currentTime.toFixed(2)}s / {totalDuration.toFixed(2)}s</div>
           <div><span className="label">Escena:</span> {activeSceneInfo?.id || '-'} ({activeSceneInfo?.type || '-'})</div>
+          <div><span className="label">Galería:</span> {imageCount} fotos + {videoCount} videos</div>
           <div><span className="label">Progreso:</span> {progress.toFixed(1)}%</div>
         </div>
       </div>
+
+      {/* Modal de gestión de archivos */}
+      <div
+        className={`np-modal-backdrop ${modalVisible ? 'np-visible' : ''}`}
+        onClick={() => setModalVisible(false)}
+      >
+        <div className="np-modal" onClick={e => e.stopPropagation()}>
+          <h2>Galería de la Animación</h2>
+          <div className="subtitle">
+            Sube tus fotos y videos — se integrarán automáticamente en la animación
+          </div>
+
+          <div className="stats">
+            <div className="stat">
+              <div className="num">{galleryItems.length}</div>
+              <div className="label">Total</div>
+            </div>
+            <div className="stat">
+              <div className="num">{imageCount}</div>
+              <div className="label">Fotos</div>
+            </div>
+            <div className="stat">
+              <div className="num">{videoCount}</div>
+              <div className="label">Videos</div>
+            </div>
+          </div>
+
+          <div
+            className="np-dropzone"
+            onClick={() => fileInputRef.current?.click()}
+            onDrop={handleDrop}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+          >
+            <div className="icon">+</div>
+            <div className="text">
+              {uploading ? 'Subiendo...' : 'Click o arrastra archivos aquí'}
+            </div>
+            <div className="hint">
+              Fotos: JPG, PNG, WebP, GIF · Videos: MP4, WebM, MOV · Máx 100MB
+            </div>
+          </div>
+
+          {galleryItems.length > 0 && (
+            <div className="np-file-list">
+              {galleryItems.map((item, i) => (
+                <div key={item.filename} className="np-file-item">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  {item.type === 'image' ? (
+                    <img className="thumb" src={item.path} alt={item.filename} />
+                  ) : (
+                    <div className="thumb" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#D4AF37', fontSize: 20 }}>▶</div>
+                  )}
+                  <div className="info">
+                    <div className="name">{item.caption || item.filename}</div>
+                    <div className="meta">
+                      {(item.size / 1024).toFixed(0)} KB · {item.filename}
+                    </div>
+                  </div>
+                  <span className={`badge ${item.type}`}>{item.type === 'image' ? 'Foto' : 'Video'}</span>
+                  <button
+                    className="delete-btn"
+                    onClick={() => handleDelete(item.filename)}
+                    title="Eliminar"
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="actions">
+            <button className="btn" onClick={() => setModalVisible(false)}>
+              Cerrar
+            </button>
+            <button
+              className="btn primary"
+              onClick={() => {
+                loadGallery()
+                setModalVisible(false)
+                showToast('Animación recargada', 'success')
+              }}
+            >
+              Recargar animación
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Toast */}
+      {toast && (
+        <div className={`np-toast visible ${toast.type}`}>
+          {toast.message}
+        </div>
+      )}
     </div>
   )
 }

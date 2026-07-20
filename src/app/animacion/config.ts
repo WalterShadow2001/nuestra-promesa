@@ -45,6 +45,7 @@ export const CONFIG = {
   timeline: {
     logoIntro: 8.0,
     photoDuration: 7.0,
+    videoDuration: 12.0,
     photoTransition: 1.4,
     finalScene: 8.0,
     loopPause: 0
