@@ -222,6 +222,172 @@ export async function updateImageSettings(
   return (result.rowsAffected || 0) > 0
 }
 
+// === Upload por chunks ===
+
+interface ChunkInfo {
+  fileId: string
+  chunkIndex: number
+  totalChunks: number
+  filename: string
+  mimeType: string
+  data: Uint8Array
+}
+
+// Guardar un chunk
+export async function saveUploadChunk(info: ChunkInfo): Promise<void> {
+  const client = getTursoClient()
+  await client.execute({
+    sql: `INSERT INTO upload_chunks (file_id, chunk_index, total_chunks, filename, mime_type, data, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, unixepoch())`,
+    args: [
+      info.fileId,
+      info.chunkIndex,
+      info.totalChunks,
+      info.filename,
+      info.mimeType,
+      Buffer.from(info.data)
+    ]
+  })
+}
+
+// Verificar si todos los chunks de un archivo están listos
+export async function checkAllChunksReady(fileId: string): Promise<{
+  ready: boolean
+  totalExpected: number
+  totalReceived: number
+  filename: string
+  mimeType: string
+}> {
+  const client = getTursoClient()
+  const result = await client.execute({
+    sql: `SELECT file_id, total_chunks, filename, mime_type, COUNT(*) as received
+          FROM upload_chunks
+          WHERE file_id = ?
+          GROUP BY file_id, total_chunks, filename, mime_type`,
+    args: [fileId]
+  })
+
+  if (result.rows.length === 0) {
+    return { ready: false, totalExpected: 0, totalReceived: 0, filename: '', mimeType: '' }
+  }
+
+  const row = result.rows[0]
+  const totalExpected = row.total_chunks as number
+  const totalReceived = row.received as number
+  return {
+    ready: totalReceived === totalExpected,
+    totalExpected,
+    totalReceived,
+    filename: row.filename as string,
+    mimeType: row.mime_type as string
+  }
+}
+
+// Combinar chunks y crear media_item
+export async function finalizeChunkedUpload(fileId: string): Promise<{
+  success: boolean
+  filename: string
+  id?: number
+  error?: string
+}> {
+  const client = getTursoClient()
+  // Obtener metadata del primer chunk
+  const metaResult = await client.execute({
+    sql: `SELECT filename, mime_type, total_chunks FROM upload_chunks WHERE file_id = ? LIMIT 1`,
+    args: [fileId]
+  })
+  if (metaResult.rows.length === 0) {
+    return { success: false, filename: '', error: 'No se encontraron chunks para este fileId' }
+  }
+
+  const originalFilename = metaResult.rows[0].filename as string
+  const mimeType = metaResult.rows[0].mime_type as string
+  const totalChunks = metaResult.rows[0].total_chunks as number
+
+  // Verificar que están todos los chunks
+  const countResult = await client.execute({
+    sql: `SELECT COUNT(*) as count FROM upload_chunks WHERE file_id = ?`,
+    args: [fileId]
+  })
+  const received = countResult.rows[0].count as number
+  if (received !== totalChunks) {
+    return {
+      success: false,
+      filename: originalFilename,
+      error: `Chunks incompletos: ${received}/${totalChunks}`
+    }
+  }
+
+  // Leer todos los chunks en orden
+  const chunksResult = await client.execute({
+    sql: `SELECT data FROM upload_chunks WHERE file_id = ? ORDER BY chunk_index ASC`,
+    args: [fileId]
+  })
+
+  // Concatenar chunks
+  const chunks: Buffer[] = []
+  let totalSize = 0
+  for (const row of chunksResult.rows) {
+    const chunk = Buffer.from(row.data as Uint8Array)
+    chunks.push(chunk)
+    totalSize += chunk.length
+  }
+  const fullData = Buffer.concat(chunks, totalSize)
+
+  // Determinar tipo
+  const type = getMediaType(originalFilename)
+  if (!type) {
+    // Limpiar chunks
+    await client.execute({
+      sql: `DELETE FROM upload_chunks WHERE file_id = ?`,
+      args: [fileId]
+    })
+    return { success: false, filename: originalFilename, error: 'Formato no soportado' }
+  }
+
+  // Generar filename único
+  const safeName = await getUniqueFilename(originalFilename)
+
+  // Caption automático
+  const caption = cleanCaption(originalFilename) || null
+
+  // Insertar en media_items
+  const insertResult = await client.execute({
+    sql: `INSERT INTO media_items (filename, original_name, mime_type, type, caption, size, data, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, unixepoch())`,
+    args: [
+      safeName,
+      originalFilename,
+      mimeType,
+      type,
+      caption,
+      totalSize,
+      fullData
+    ]
+  })
+
+  // Limpiar chunks
+  await client.execute({
+    sql: `DELETE FROM upload_chunks WHERE file_id = ?`,
+    args: [fileId]
+  })
+
+  return {
+    success: true,
+    filename: safeName,
+    id: Number(insertResult.lastInsertRowid)
+  }
+}
+
+// Limpiar chunks antiguos (más de 1 hora) - para limpieza periódica
+export async function cleanupOldChunks(): Promise<number> {
+  const client = getTursoClient()
+  const result = await client.execute({
+    sql: `DELETE FROM upload_chunks WHERE created_at < unixepoch() - 3600`
+  })
+  return result.rowsAffected || 0
+}
+
 // Generar filename único
 export async function getUniqueFilename(filename: string): Promise<string> {
   const client = getTursoClient()

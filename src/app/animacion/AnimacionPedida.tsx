@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { CONFIG } from './config'
-import { fetchGallery, uploadFiles, deleteFile, updateImageSettings, type GalleryItem, type ImageSettings } from './gallery'
+import { fetchGallery, uploadFilesSmart, deleteFile, updateImageSettings, type GalleryItem, type ImageSettings } from './gallery'
 
 // ============================================================
 // Curvas de easing profesionales
@@ -1037,29 +1037,29 @@ html, body {
   100% { opacity: 0.7; transform: translateY(0) scaleX(1); }
 }
 
-/* Ken Burns con zoom en caras (pan mínimo, más zoom, bias hacia tercer superior) */
+/* Ken Burns sutil - zoom mínimo, fondo visible */
 @keyframes npKenBurnsA {
-  0% { transform: scale(1.15) translate(0, 2%); filter: brightness(0.7); }
-  30% { filter: brightness(0.85); }
-  100% { transform: scale(1.35) translate(0, 4%); filter: brightness(0.95); }
+  0% { transform: scale(1.00) translate(0, 0); filter: brightness(0.75); }
+  30% { filter: brightness(0.88); }
+  100% { transform: scale(1.06) translate(0, 1%); filter: brightness(0.95); }
 }
 @keyframes npKenBurnsB {
-  0% { transform: scale(1.32) translate(0, 4%); filter: brightness(0.95); }
-  70% { filter: brightness(0.85); }
-  100% { transform: scale(1.12) translate(0, 2%); filter: brightness(0.7); }
+  0% { transform: scale(1.06) translate(0, 1%); filter: brightness(0.95); }
+  70% { filter: brightness(0.88); }
+  100% { transform: scale(1.00) translate(0, 0); filter: brightness(0.75); }
 }
 @keyframes npKenBurnsC {
-  0% { transform: scale(1.18) translate(-1%, 3%); filter: brightness(0.75); }
-  50% { filter: brightness(0.9); }
-  100% { transform: scale(1.30) translate(1%, 5%); filter: brightness(0.95); }
+  0% { transform: scale(1.02) translate(0, 1%); filter: brightness(0.78); }
+  50% { filter: brightness(0.90); }
+  100% { transform: scale(1.06) translate(0, 2%); filter: brightness(0.95); }
 }
 @keyframes npKenBurnsD {
-  0% { transform: scale(1.15) translate(1%, 2%); filter: brightness(0.7); }
-  100% { transform: scale(1.28) translate(-1%, 4%); filter: brightness(0.95); }
+  0% { transform: scale(1.00) translate(0.5%, 0); filter: brightness(0.75); }
+  100% { transform: scale(1.05) translate(-0.5%, 1%); filter: brightness(0.95); }
 }
 @keyframes npKenBurnsE {
-  0% { transform: scale(1.28) translate(-1%, 3%); filter: brightness(0.95); }
-  100% { transform: scale(1.14) translate(1%, 2%); filter: brightness(0.7); }
+  0% { transform: scale(1.05) translate(-0.5%, 1%); filter: brightness(0.95); }
+  100% { transform: scale(1.00) translate(0.5%, 0); filter: brightness(0.75); }
 }
 
 @keyframes npCaptionRise {
@@ -1378,7 +1378,7 @@ export default function AnimacionPedida() {
     document.head.appendChild(style)
   }, [])
 
-  // Manejar upload - con progreso
+  // Manejar upload - con progreso y chunked para archivos grandes
   const [uploadProgress, setUploadProgress] = useState(0)
   const [uploadFileName, setUploadFileName] = useState('')
 
@@ -1388,7 +1388,7 @@ export default function AnimacionPedida() {
     setUploadProgress(0)
     setUploadFileName(files.length === 1 ? files[0].name : `${files.length} archivos`)
     try {
-      const result = await uploadFiles(Array.from(files), (percent, fileName) => {
+      const result = await uploadFilesSmart(Array.from(files), (percent, fileName) => {
         setUploadProgress(percent)
         setUploadFileName(fileName)
       })
@@ -1402,12 +1402,16 @@ export default function AnimacionPedida() {
         }
         await loadGallery()
       } else {
-        // Mensaje de error más específico
+        // Mensaje de error detallado
         const errMsg = result.message || 'Error desconocido'
         if (errMsg.includes('Timeout') || errMsg.includes('tardó')) {
-          showToast('El archivo es muy grande o la conexión es lenta. Intenta de nuevo.', 'error')
-        } else if (errMsg.includes('network') || errMsg.includes('red')) {
+          showToast('Timeout: el archivo es muy grande o la conexión es lenta. Intenta de nuevo.', 'error')
+        } else if (errMsg.includes('red') || errMsg.includes('network')) {
           showToast('Error de red. Verifica tu conexión a internet.', 'error')
+        } else if (errMsg.includes('chunk')) {
+          showToast(`Error en subida por partes: ${errMsg}`, 'error')
+        } else if (errMsg.includes('HTTP 413')) {
+          showToast('Archivo demasiado grande para el servidor', 'error')
         } else {
           showToast(`Error: ${errMsg}`, 'error')
         }
@@ -1623,32 +1627,48 @@ export default function AnimacionPedida() {
           >
             <div
               className="np-media-frame"
-              style={item.image_settings && !isVideo ? {
-                // Aplicar zoom del usuario al contenedor (la imagen conserva Ken Burns)
-                transform: `scale(${item.image_settings.zoom})`,
-                transformOrigin: `${50 + item.image_settings.pan_x / 2}% ${30 + item.image_settings.pan_y / 2}%`
+              style={item.image_settings && !isVideo && item.image_settings.zoom < 1.0 ? {
+                // Cuando el zoom es < 1.0, mostrar fondo borroso de la misma imagen
+                backgroundImage: `url(${item.path})`,
+                backgroundSize: 'cover',
+                backgroundPosition: 'center',
+                filter: 'blur(30px) brightness(0.6)',
+                transform: 'scale(1.1)'  // Para que el blur no muestre bordes
               } : undefined}
             >
-              {isVideo ? (
-                <video
-                  ref={el => { videoElementsRef.current[sceneId] = el }}
-                  className="np-media-video"
-                  src={item.path}
-                  muted
-                  playsInline
-                  preload="auto"
-                />
-              ) : (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  className="np-media-img"
-                  src={item.path}
-                  alt={item.caption || 'Foto'}
-                  style={item.image_settings ? {
-                    objectPosition: `${50 + item.image_settings.pan_x / 2}% ${30 + item.image_settings.pan_y / 2}%`
-                  } : undefined}
-                />
-              )}
+              <div
+                className="np-media-img-wrapper"
+                style={item.image_settings && !isVideo ? {
+                  // Aplicar zoom del usuario al wrapper (la imagen conserva Ken Burns)
+                  transform: `scale(${item.image_settings.zoom})`,
+                  transformOrigin: `${50 + item.image_settings.pan_x / 2}% ${30 + item.image_settings.pan_y / 2}%`,
+                  position: 'absolute',
+                  inset: 0,
+                  width: '100%',
+                  height: '100%'
+                } : { position: 'absolute', inset: 0, width: '100%', height: '100%' }}
+              >
+                {isVideo ? (
+                  <video
+                    ref={el => { videoElementsRef.current[sceneId] = el }}
+                    className="np-media-video"
+                    src={item.path}
+                    muted
+                    playsInline
+                    preload="auto"
+                  />
+                ) : (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    className="np-media-img"
+                    src={item.path}
+                    alt={item.caption || 'Foto'}
+                    style={item.image_settings ? {
+                      objectPosition: `${50 + item.image_settings.pan_x / 2}% ${30 + item.image_settings.pan_y / 2}%`
+                    } : undefined}
+                  />
+                )}
+              </div>
               <div className="np-media-overlay"></div>
             </div>
             <div className="np-media-border">
@@ -1914,7 +1934,7 @@ export default function AnimacionPedida() {
                   </label>
                   <input
                     type="range"
-                    min={1}
+                    min={0.5}
                     max={3}
                     step={0.01}
                     value={editorSettings.zoom}
