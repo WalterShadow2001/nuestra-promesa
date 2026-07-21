@@ -49,42 +49,70 @@ interface Particle {
 }
 
 // ============================================================
-// Hook del timeline dinámico
+// Hook del timeline dinámico con shuffle aleatorio y videos hasta el final
 // ============================================================
-function useTimeline(galleryItems: GalleryItem[]) {
+
+// Función Fisher-Yates shuffle
+function shuffle<T>(arr: T[]): T[] {
+  const a = [...arr]
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]]
+  }
+  return a
+}
+
+function useTimeline(
+  galleryItems: GalleryItem[],
+  videoDurations: Record<string, number>,  // filename -> duración real del video en segundos
+  onVideoEndsEarly: ((sceneId: string) => void) | null
+) {
   const scenesRef = useRef<Scene[]>([])
   const totalDurationRef = useRef(0)
   const [currentTime, setCurrentTime] = useState(0)
   const [currentSceneIndex, setCurrentSceneIndex] = useState(-1)
   const [isPlaying, setIsPlaying] = useState(true)
+  const [loopCount, setLoopCount] = useState(0)  // se incrementa en cada loop
   const lastTimeRef = useRef(0)
   const rafRef = useRef<number | null>(null)
   const onSceneChangeRef = useRef<((scene: Scene, index: number) => void) | null>(null)
   const isPlayingRef = useRef(isPlaying)
   const speedRef = useRef(CONFIG.style.speed || 1)
+  const videoDurationsRef = useRef(videoDurations)
+  const onVideoEndsEarlyRef = useRef(onVideoEndsEarly)
 
   useEffect(() => { isPlayingRef.current = isPlaying }, [isPlaying])
+  useEffect(() => { videoDurationsRef.current = videoDurations }, [videoDurations])
+  useEffect(() => { onVideoEndsEarlyRef.current = onVideoEndsEarly }, [onVideoEndsEarly])
 
   // Construir timeline dinámicamente según los items de la galería
+  // Se reconstruye en cada loop para aleatorizar el orden
   useEffect(() => {
     const tl = CONFIG.timeline
     const scenes: Scene[] = []
     let total = 0
 
-    // Escena 1: Logo intro
-    scenes.push({
-      id: 'scene-logo', type: 'logo', duration: tl.logoIntro,
-      start: total, end: total + tl.logoIntro,
-      transitionIn: 1.8, transitionOut: 1.6
-    })
-    total += tl.logoIntro
-
-    // Escenas dinámicas (fotos y videos)
-    galleryItems.forEach((item, i) => {
-      const isVideo = item.type === 'video'
-      const duration = isVideo ? tl.videoDuration : tl.photoDuration
+    // Escena 1: Logo intro (siempre primera, solo en loop 0)
+    if (loopCount === 0) {
       scenes.push({
-        id: `scene-media-${i}`,
+        id: 'scene-logo', type: 'logo', duration: tl.logoIntro,
+        start: total, end: total + tl.logoIntro,
+        transitionIn: 1.8, transitionOut: 1.6
+      })
+      total += tl.logoIntro
+    }
+
+    // Escenas dinámicas con ORDEN ALEATORIO en cada loop
+    const shuffledItems = shuffle(galleryItems)
+    shuffledItems.forEach((item, i) => {
+      const isVideo = item.type === 'video'
+      // Para videos: usar duración real si está disponible, sino tl.videoDuration
+      const realDuration = isVideo && videoDurations[item.filename]
+        ? videoDurations[item.filename] + tl.photoTransition  // transición extra
+        : (isVideo ? tl.videoDuration : tl.photoDuration)
+      const duration = realDuration
+      scenes.push({
+        id: `scene-media-${loopCount}-${i}`,
         type: isVideo ? 'video' : 'photo',
         mediaIndex: i,
         mediaItem: item,
@@ -98,18 +126,23 @@ function useTimeline(galleryItems: GalleryItem[]) {
       total += duration
     })
 
-    // Escena final
-    scenes.push({
-      id: 'scene-final', type: 'final', duration: tl.finalScene,
-      start: total, end: total + tl.finalScene,
-      transitionIn: 1.8, transitionOut: 1.4
-    })
-    total += tl.finalScene + tl.loopPause
+    // Escena final (siempre al final, solo en loop 0)
+    if (loopCount === 0) {
+      scenes.push({
+        id: 'scene-final', type: 'final', duration: tl.finalScene,
+        start: total, end: total + tl.finalScene,
+        transitionIn: 1.8, transitionOut: 1.4
+      })
+      total += tl.finalScene + tl.loopPause
+    } else {
+      total += tl.loopPause
+    }
 
     scenesRef.current = scenes
     totalDurationRef.current = total
-  }, [galleryItems])
+  }, [galleryItems, loopCount, videoDurations])
 
+  // Loop principal con detección de fin de video
   useEffect(() => {
     const loop = (time: number) => {
       let dt = time - lastTimeRef.current
@@ -121,7 +154,11 @@ function useTimeline(galleryItems: GalleryItem[]) {
           const speed = speedRef.current
           let next = prev + (dt / 1000) * speed
           const total = totalDurationRef.current
-          if (next >= total) next = next % total
+          if (next >= total) {
+            // Loop completo: incrementar loopCount para re-shuffle
+            setLoopCount(c => c + 1)
+            next = 0
+          }
           return next
         })
       }
@@ -133,6 +170,14 @@ function useTimeline(galleryItems: GalleryItem[]) {
       if (rafRef.current) cancelAnimationFrame(rafRef.current)
     }
   }, [])
+
+  // Reset currentTime cuando cambia loopCount
+  useEffect(() => {
+    if (loopCount > 0) {
+      setCurrentTime(0)
+      setCurrentSceneIndex(-1)
+    }
+  }, [loopCount])
 
   useEffect(() => {
     const scenes = scenesRef.current
@@ -186,6 +231,16 @@ function useTimeline(galleryItems: GalleryItem[]) {
     setCurrentSceneIndex(-1)
   }, [])
 
+  // Función para saltar a la siguiente escena (usada cuando un video termina antes)
+  const skipToNextScene = useCallback(() => {
+    const scenes = scenesRef.current
+    if (currentSceneIndex < scenes.length - 1) {
+      const nextScene = scenes[currentSceneIndex + 1]
+      setCurrentTime(nextScene.start + 0.05)
+      setCurrentSceneIndex(-1)
+    }
+  }, [currentSceneIndex])
+
   return {
     scenes: scenesRef.current,
     totalDuration: totalDurationRef.current,
@@ -196,7 +251,9 @@ function useTimeline(galleryItems: GalleryItem[]) {
     getOpacities,
     jumpToScene,
     seekTo,
-    onSceneChangeRef
+    skipToNextScene,
+    onSceneChangeRef,
+    loopCount
   }
 }
 
@@ -296,6 +353,41 @@ html, body {
   font-family: 'Cormorant Garamond', serif;
   color: #F5EFE0;
   cursor: none;
+}
+
+/* === Cursor elegante personalizado === */
+.np-cursor-dot {
+  position: fixed;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #D4AF37;
+  pointer-events: none;
+  z-index: 9999;
+  transform: translate(-50%, -50%);
+  box-shadow:
+    0 0 8px #D4AF37,
+    0 0 16px rgba(212, 175, 55, 0.6),
+    0 0 24px rgba(212, 175, 55, 0.3);
+  transition: width 0.2s, height 0.2s, opacity 0.2s;
+}
+.np-cursor-ring {
+  position: fixed;
+  width: 36px;
+  height: 36px;
+  border: 1px solid rgba(212, 175, 55, 0.6);
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 9998;
+  transform: translate(-50%, -50%);
+  transition: transform 0.15s ease-out, width 0.2s, height 0.2s, opacity 0.2s, border-color 0.2s;
+}
+.np-cursor-ring.np-hover {
+  width: 56px;
+  height: 56px;
+  border-color: #D4AF37;
+  background: rgba(212, 175, 55, 0.08);
+  box-shadow: 0 0 20px rgba(212, 175, 55, 0.3);
 }
 
 .np-stage {
@@ -404,9 +496,11 @@ html, body {
   position: absolute; inset: -10%; width: 120%; height: 120%;
   object-fit: cover; will-change: transform;
   filter: brightness(0.82) contrast(1.08) saturate(0.92);
+  object-position: center 30%;  /* Prioriza la parte superior (rostros) */
 }
 .np-media-video {
   inset: 0; width: 100%; height: 100%;
+  object-position: center center;
 }
 .np-media-overlay {
   position: absolute; inset: 0;
@@ -711,16 +805,6 @@ html, body {
 }
 .np-progress-bar.np-visible { opacity: 0.9; }
 
-.np-cursor {
-  position: fixed; width: 14px; height: 14px;
-  border: 1px solid rgba(212,175,55,0.5); border-radius: 50%;
-  pointer-events: none; z-index: 200;
-  transform: translate(-50%, -50%); opacity: 0;
-  transition: opacity 0.3s, width 0.2s, height 0.2s;
-  mix-blend-mode: difference;
-}
-.np-cursor.np-visible { opacity: 0.6; }
-
 /* === Keyframes === */
 @keyframes npLogoAppear {
   0% { opacity: 0; transform: scale(0.82) translateY(30px) rotateX(15deg); filter: blur(20px) drop-shadow(0 0 0 rgba(212, 175, 55, 0)); }
@@ -749,28 +833,29 @@ html, body {
   100% { opacity: 0.7; transform: translateY(0) scaleX(1); }
 }
 
+/* Ken Burns con zoom en caras (pan mínimo, más zoom, bias hacia tercer superior) */
 @keyframes npKenBurnsA {
-  0% { transform: scale(1.0) translate(0, 0); filter: brightness(0.7); }
+  0% { transform: scale(1.15) translate(0, 2%); filter: brightness(0.7); }
   30% { filter: brightness(0.85); }
-  100% { transform: scale(1.18) translate(-2.5%, -1.5%); filter: brightness(0.95); }
+  100% { transform: scale(1.35) translate(0, 4%); filter: brightness(0.95); }
 }
 @keyframes npKenBurnsB {
-  0% { transform: scale(1.22) translate(2.5%, 1.5%); filter: brightness(0.95); }
+  0% { transform: scale(1.32) translate(0, 4%); filter: brightness(0.95); }
   70% { filter: brightness(0.85); }
-  100% { transform: scale(1.0) translate(0, 0); filter: brightness(0.7); }
+  100% { transform: scale(1.12) translate(0, 2%); filter: brightness(0.7); }
 }
 @keyframes npKenBurnsC {
-  0% { transform: scale(1.05) translate(0, 2.5%); filter: brightness(0.75); }
+  0% { transform: scale(1.18) translate(-1%, 3%); filter: brightness(0.75); }
   50% { filter: brightness(0.9); }
-  100% { transform: scale(1.22) translate(0, -2.5%); filter: brightness(0.95); }
+  100% { transform: scale(1.30) translate(1%, 5%); filter: brightness(0.95); }
 }
 @keyframes npKenBurnsD {
-  0% { transform: scale(1.0) translate(2.5%, -1%) rotate(0.5deg); filter: brightness(0.7); }
-  100% { transform: scale(1.15) translate(-2.5%, 1.5%) rotate(0deg); filter: brightness(0.95); }
+  0% { transform: scale(1.15) translate(1%, 2%); filter: brightness(0.7); }
+  100% { transform: scale(1.28) translate(-1%, 4%); filter: brightness(0.95); }
 }
 @keyframes npKenBurnsE {
-  0% { transform: scale(1.18) translate(-1.5%, 1%) rotate(-0.5deg); filter: brightness(0.95); }
-  100% { transform: scale(1.0) translate(1.5%, 0) rotate(0deg); filter: brightness(0.7); }
+  0% { transform: scale(1.28) translate(-1%, 3%); filter: brightness(0.95); }
+  100% { transform: scale(1.14) translate(1%, 2%); filter: brightness(0.7); }
 }
 
 @keyframes npCaptionRise {
@@ -813,7 +898,9 @@ export default function AnimacionPedida() {
   const [progress, setProgress] = useState(0)
   const [activeSceneInfo, setActiveSceneInfo] = useState<{id: string, type: string} | null>(null)
   const [cursorPos, setCursorPos] = useState({ x: 0, y: 0 })
+  const [isHovering, setIsHovering] = useState(false)
   const [galleryItems, setGalleryItems] = useState<GalleryItem[]>([])
+  const [videoDurations, setVideoDurations] = useState<Record<string, number>>({})
   const [modalVisible, setModalVisible] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null)
@@ -832,11 +919,24 @@ export default function AnimacionPedida() {
     loadGallery()
   }, [loadGallery])
 
+  // Callback cuando un video termina antes que su escena
+  const handleVideoEndsEarly = useCallback((sceneId: string) => {
+    // El video terminó - saltar a la siguiente escena
+    console.log(`Video ${sceneId} terminó, saltando a siguiente escena`)
+    // Usamos setTimeout para evitar race conditions
+    setTimeout(() => {
+      // Llamar a skipToNextScene desde el window.__anim si está disponible
+      if ((window as any).__anim?.skipToNextScene) {
+        (window as any).__anim.skipToNextScene()
+      }
+    }, 100)
+  }, [])
+
   const {
     scenes, totalDuration, currentTime, currentSceneIndex,
     isPlaying, setIsPlaying, getOpacities, jumpToScene, seekTo,
-    onSceneChangeRef
-  } = useTimeline(galleryItems)
+    skipToNextScene, onSceneChangeRef, loopCount
+  } = useTimeline(galleryItems, videoDurations, handleVideoEndsEarly)
 
   useParticles(particlesContainerRef)
 
@@ -851,25 +951,52 @@ export default function AnimacionPedida() {
     ;(window as any).__anim = {
       timeline: {
         currentTime, totalDuration, currentSceneIndex, isPlaying, scenes,
-        seekTo, jumpToScene,
+        seekTo, jumpToScene, skipToNextScene, loopCount,
         play: () => setIsPlaying(true),
         pause: () => setIsPlaying(false)
       },
       gallery: galleryItems,
+      videoDurations,
       reloadGallery: loadGallery
     }
-  }, [currentTime, totalDuration, currentSceneIndex, isPlaying, scenes, seekTo, jumpToScene, setIsPlaying, galleryItems, loadGallery])
+  }, [currentTime, totalDuration, currentSceneIndex, isPlaying, scenes, seekTo, jumpToScene, skipToNextScene, loopCount, galleryItems, videoDurations, loadGallery])
 
-  // Cursor personalizado
+  // Cursor personalizado - siempre activo
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
       setCursorPos({ x: e.clientX, y: e.clientY })
     }
-    if (hudVisible) {
-      document.addEventListener('mousemove', handleMouseMove)
+    const handleMouseDown = () => {
+      const dot = document.querySelector('.np-cursor-dot') as HTMLElement
+      const ring = document.querySelector('.np-cursor-ring') as HTMLElement
+      if (dot) dot.style.transform = 'translate(-50%, -50%) scale(0.7)'
+      if (ring) ring.style.transform = 'translate(-50%, -50%) scale(0.85)'
     }
-    return () => document.removeEventListener('mousemove', handleMouseMove)
-  }, [hudVisible])
+    const handleMouseUp = () => {
+      const dot = document.querySelector('.np-cursor-dot') as HTMLElement
+      const ring = document.querySelector('.np-cursor-ring') as HTMLElement
+      if (dot) dot.style.transform = 'translate(-50%, -50%) scale(1)'
+      if (ring) ring.style.transform = 'translate(-50%, -50%) scale(1)'
+    }
+    const handleMouseOver = (e: MouseEvent) => {
+      const target = e.target as HTMLElement
+      if (target.closest('button, a, .np-upload-btn, .np-dropzone, .np-file-item, [role="button"]')) {
+        setIsHovering(true)
+      } else {
+        setIsHovering(false)
+      }
+    }
+    document.addEventListener('mousemove', handleMouseMove)
+    document.addEventListener('mousedown', handleMouseDown)
+    document.addEventListener('mouseup', handleMouseUp)
+    document.addEventListener('mouseover', handleMouseOver)
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove)
+      document.removeEventListener('mousedown', handleMouseDown)
+      document.removeEventListener('mouseup', handleMouseUp)
+      document.removeEventListener('mouseover', handleMouseOver)
+    }
+  }, [])
 
   // Callback de cambio de escena
   onSceneChangeRef.current = (scene: Scene, index: number) => {
@@ -878,12 +1005,42 @@ export default function AnimacionPedida() {
     if (!el) return
 
     if (scene.type === 'photo' || scene.type === 'video') {
-      // Para video: reproducir
+      // Para video: reproducir SIN SONIDO hasta el final
       if (scene.type === 'video') {
         const video = videoElementsRef.current[scene.id]
         if (video) {
-          video.currentTime = 0
+          // Silenciar el video
+          video.muted = true
+          video.volume = 0
+          // Reiniciar desde el inicio
+          try { video.currentTime = 0 } catch {}
           video.play().catch(() => {})
+
+          // Medir duración real del video y guardarla
+          const measureDuration = () => {
+            if (video.duration && isFinite(video.duration) && video.duration > 0) {
+              const filename = scene.mediaItem?.filename
+              if (filename) {
+                setVideoDurations(prev => {
+                  if (prev[filename] === video.duration) return prev
+                  return { ...prev, [filename]: video.duration }
+                })
+              }
+            }
+          }
+          if (video.readyState >= 1) {
+            measureDuration()
+          } else {
+            video.addEventListener('loadedmetadata', measureDuration, { once: true })
+          }
+
+          // Cuando el video termine, saltar a la siguiente escena
+          const handleEnded = () => {
+            console.log(`Video ${scene.id} ended`)
+            handleVideoEndsEarly(scene.id)
+            video.removeEventListener('ended', handleEnded)
+          }
+          video.addEventListener('ended', handleEnded)
         }
       }
 
@@ -959,14 +1116,21 @@ export default function AnimacionPedida() {
         }
       }
 
-      // Pausar videos de escenas inactivas
+      // Pausar videos de escenas inactivas y reiniciar para próxima vez
       if (scene.type === 'video') {
         const video = videoElementsRef.current[scene.id]
         if (video) {
           if (opacity > 0.1) {
-            if (video.paused) video.play().catch(() => {})
+            // Solo reproducir si está pausado y no ha terminado
+            if (video.paused && video.currentTime < video.duration) {
+              video.play().catch(() => {})
+            }
           } else {
-            if (!video.paused) video.pause()
+            // Escena inactiva: pausar y reiniciar
+            if (!video.paused) {
+              video.pause()
+              try { video.currentTime = 0 } catch {}
+            }
           }
         }
       }
@@ -1123,13 +1287,15 @@ export default function AnimacionPedida() {
         </div>
       </div>
 
-      {/* Escenas dinámicas (fotos y videos) */}
-      {galleryItems.map((item, i) => {
-        const isVideo = item.type === 'video'
-        const sceneId = `scene-media-${i}`
+      {/* Escenas dinámicas (fotos y videos) - renderizadas desde scenes para soportar shuffle */}
+      {scenes.filter(s => s.type === 'photo' || s.type === 'video').map((scene) => {
+        const item = scene.mediaItem
+        if (!item) return null
+        const isVideo = scene.type === 'video'
+        const sceneId = scene.id
         return (
           <div
-            key={`media-${i}`}
+            key={sceneId}
             className="np-scene np-media-scene"
             id={sceneId}
             ref={el => { sceneElementsRef.current[sceneId] = el }}
@@ -1141,13 +1307,12 @@ export default function AnimacionPedida() {
                   className="np-media-video"
                   src={item.path}
                   muted
-                  loop
                   playsInline
                   preload="auto"
                 />
               ) : (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img className="np-media-img" src={item.path} alt={item.caption || `Foto ${i+1}`} />
+                <img className="np-media-img" src={item.path} alt={item.caption || 'Foto'} />
               )}
               <div className="np-media-overlay"></div>
             </div>
@@ -1192,9 +1357,13 @@ export default function AnimacionPedida() {
         style={{ width: `${progress}%` }}
       ></div>
 
-      {/* Cursor personalizado */}
+      {/* Cursor personalizado elegante - siempre visible */}
       <div
-        className={`np-cursor ${hudVisible ? 'np-visible' : ''}`}
+        className="np-cursor-dot"
+        style={{ left: cursorPos.x, top: cursorPos.y }}
+      ></div>
+      <div
+        className={`np-cursor-ring ${isHovering ? 'np-hover' : ''}`}
         style={{ left: cursorPos.x, top: cursorPos.y }}
       ></div>
 
@@ -1211,6 +1380,7 @@ export default function AnimacionPedida() {
         <div className="scene-info">
           <div><span className="label">Tiempo:</span> {currentTime.toFixed(2)}s / {totalDuration.toFixed(2)}s</div>
           <div><span className="label">Escena:</span> {activeSceneInfo?.id || '-'} ({activeSceneInfo?.type || '-'})</div>
+          <div><span className="label">Loop:</span> #{loopCount + 1} (orden aleatorio)</div>
           <div><span className="label">Galería:</span> {imageCount} fotos + {videoCount} videos</div>
           <div><span className="label">Progreso:</span> {progress.toFixed(1)}%</div>
         </div>
