@@ -1471,13 +1471,9 @@ export default function AnimacionPedida() {
 
   // Abrir editor
   const openEditor = useCallback((item: GalleryItem) => {
-    if (item.type !== 'image') {
-      showToast('Solo se pueden editar fotos, no videos', 'info')
-      return
-    }
     setEditingItem(item)
     setEditorSettings(item.image_settings || { pan_x: 0, pan_y: 0, zoom: 1 })
-  }, [showToast])
+  }, [])
 
   // Cerrar editor
   const closeEditor = useCallback(() => {
@@ -1625,28 +1621,37 @@ export default function AnimacionPedida() {
             id={sceneId}
             ref={el => { sceneElementsRef.current[sceneId] = el }}
           >
-            <div
-              className="np-media-frame"
-              style={item.image_settings && !isVideo && item.image_settings.zoom < 1.0 ? {
-                // Cuando el zoom es < 1.0, mostrar fondo borroso de la misma imagen
-                backgroundImage: `url(${item.path})`,
-                backgroundSize: 'cover',
-                backgroundPosition: 'center',
-                filter: 'blur(30px) brightness(0.6)',
-                transform: 'scale(1.1)'  // Para que el blur no muestre bordes
-              } : undefined}
-            >
+            <div className="np-media-frame">
+              {/* Capa de fondo borroso (solo cuando zoom < 1.0 para fotos) */}
+              {item.image_settings && !isVideo && item.image_settings.zoom < 1.0 && (
+                <div
+                  className="np-media-bg-blur"
+                  style={{
+                    backgroundImage: `url(${item.path})`,
+                    backgroundSize: 'cover',
+                    backgroundPosition: 'center',
+                    filter: 'blur(40px) brightness(0.5) saturate(1.2)',
+                    transform: 'scale(1.15)',
+                    position: 'absolute',
+                    inset: 0,
+                    width: '100%',
+                    height: '100%',
+                    zIndex: 0
+                  }}
+                />
+              )}
               <div
                 className="np-media-img-wrapper"
-                style={item.image_settings && !isVideo ? {
-                  // Aplicar zoom del usuario al wrapper (la imagen conserva Ken Burns)
+                style={item.image_settings ? {
+                  // Aplicar zoom del usuario al wrapper (la imagen/video conserva Ken Burns)
                   transform: `scale(${item.image_settings.zoom})`,
                   transformOrigin: `${50 + item.image_settings.pan_x / 2}% ${30 + item.image_settings.pan_y / 2}%`,
                   position: 'absolute',
                   inset: 0,
                   width: '100%',
-                  height: '100%'
-                } : { position: 'absolute', inset: 0, width: '100%', height: '100%' }}
+                  height: '100%',
+                  zIndex: 1
+                } : { position: 'absolute', inset: 0, width: '100%', height: '100%', zIndex: 1 }}
               >
                 {isVideo ? (
                   <video
@@ -1656,6 +1661,9 @@ export default function AnimacionPedida() {
                     muted
                     playsInline
                     preload="auto"
+                    style={item.image_settings ? {
+                      objectPosition: `${50 + item.image_settings.pan_x / 2}% ${30 + item.image_settings.pan_y / 2}%`
+                    } : undefined}
                   />
                 ) : (
                   // eslint-disable-next-line @next/next/no-img-element
@@ -1805,15 +1813,13 @@ export default function AnimacionPedida() {
                     </div>
                   </div>
                   <span className={`badge ${item.type}`}>{item.type === 'image' ? 'Foto' : 'Video'}</span>
-                  {item.type === 'image' && (
-                    <button
-                      className="edit-btn"
-                      onClick={() => openEditor(item)}
-                      title="Ajustar imagen (pan y zoom)"
-                    >
-                      Editar
-                    </button>
-                  )}
+                  <button
+                    className="edit-btn"
+                    onClick={() => openEditor(item)}
+                    title="Ajustar imagen (pan y zoom)"
+                  >
+                    Editar
+                  </button>
                   <button
                     className="delete-btn"
                     onClick={() => handleDelete(item.filename)}
@@ -1873,7 +1879,7 @@ export default function AnimacionPedida() {
         >
           <div className="np-editor">
             <div className="np-editor-header">
-              <h2>Ajustar imagen</h2>
+              <h2>Ajustar {editingItem.type === 'video' ? 'video' : 'imagen'}</h2>
               <button
                 className="close-btn"
                 onClick={closeEditor}
@@ -1889,14 +1895,63 @@ export default function AnimacionPedida() {
                 onMouseDown={handleEditorMouseDown}
                 onMouseMove={handleEditorMouseMove}
                 onWheel={handleEditorWheel}
-                style={{
-                  backgroundImage: `url(${editingItem.path})`,
-                  backgroundPosition: `${50 + editorSettings.pan_x / 2}% ${30 + editorSettings.pan_y / 2}%`,
-                  backgroundSize: `${editorSettings.zoom * 100}%`,
-                  backgroundRepeat: 'no-repeat'
-                }}
               >
-                <div className="hint">Arrastra para mover · Rueda para zoom</div>
+                {/* Capa de fondo borroso cuando zoom < 1.0 */}
+                {editorSettings.zoom < 1.0 && (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      inset: 0,
+                      width: '100%',
+                      height: '100%',
+                      backgroundImage: `url(${editingItem.path})`,
+                      backgroundSize: 'cover',
+                      backgroundPosition: 'center',
+                      filter: 'blur(40px) brightness(0.5) saturate(1.2)',
+                      transform: 'scale(1.15)'
+                    }}
+                  />
+                )}
+                {/* Preview de la imagen o video */}
+                {editingItem.type === 'video' ? (
+                  <video
+                    src={editingItem.path}
+                    muted
+                    loop
+                    autoPlay
+                    playsInline
+                    style={{
+                      maxWidth: '100%',
+                      maxHeight: '100%',
+                      width: `${editorSettings.zoom * 100}%`,
+                      height: 'auto',
+                      objectFit: 'cover',
+                      objectPosition: `${50 + editorSettings.pan_x / 2}% ${30 + editorSettings.pan_y / 2}%`,
+                      position: 'relative',
+                      zIndex: 1,
+                      pointerEvents: 'none',
+                      transform: 'none'
+                    }}
+                  />
+                ) : (
+                  <img
+                    src={editingItem.path}
+                    alt="Preview"
+                    style={{
+                      maxWidth: '100%',
+                      maxHeight: '100%',
+                      width: `${editorSettings.zoom * 100}%`,
+                      height: 'auto',
+                      objectFit: 'cover',
+                      objectPosition: `${50 + editorSettings.pan_x / 2}% ${30 + editorSettings.pan_y / 2}%`,
+                      position: 'relative',
+                      zIndex: 1,
+                      pointerEvents: 'none',
+                      transform: 'none'
+                    }}
+                  />
+                )}
+                <div className="hint" style={{ zIndex: 2 }}>Arrastra para mover · Rueda para zoom</div>
               </div>
               <div className="np-editor-controls">
                 <div className="control-group">
