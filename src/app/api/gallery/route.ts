@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { listMediaItems, type MediaItem } from '@/lib/turso'
+import { listMediaItems, type MediaItem, type ImageSettings } from '@/lib/turso'
 
 type GalleryResponse = {
   success: boolean
@@ -15,6 +15,7 @@ type GalleryResponse = {
     size: number
     caption: string
     mime_type: string
+    image_settings: ImageSettings | null
     created_at: number
   }>
 }
@@ -37,6 +38,7 @@ export async function GET() {
         size: item.size,
         caption: item.caption || '',
         mime_type: item.mime_type,
+        image_settings: item.image_settings || null,
         created_at: item.created_at
       }))
     }

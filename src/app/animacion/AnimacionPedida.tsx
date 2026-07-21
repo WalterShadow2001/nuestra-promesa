@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { CONFIG } from './config'
-import { fetchGallery, uploadFiles, deleteFile, type GalleryItem } from './gallery'
+import { fetchGallery, uploadFiles, deleteFile, updateImageSettings, type GalleryItem, type ImageSettings } from './gallery'
 
 // ============================================================
 // Curvas de easing profesionales
@@ -720,6 +720,210 @@ html, body {
 .np-file-item .delete-btn:hover {
   color: #ff6666; background: rgba(255, 100, 100, 0.1);
 }
+.np-file-item .edit-btn {
+  background: transparent; border: 1px solid rgba(212,175,55,0.4);
+  color: #D4AF37; cursor: pointer;
+  padding: 4px 10px; border-radius: 4px;
+  font-size: 11px; transition: all 0.2s;
+  font-family: 'Inter', sans-serif; letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.np-file-item .edit-btn:hover {
+  background: rgba(212,175,55,0.15);
+  border-color: #D4AF37;
+}
+
+/* === Barra de progreso de upload === */
+.np-upload-progress {
+  position: fixed; bottom: 30px; left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0,0,0,0.9);
+  border: 1px solid #D4AF37;
+  padding: 16px 24px;
+  border-radius: 12px;
+  z-index: 250;
+  min-width: 320px;
+  font-family: 'Inter', sans-serif;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.6), 0 0 30px rgba(212,175,55,0.2);
+}
+.np-upload-progress .label {
+  color: #F5EFE0; font-size: 13px;
+  margin-bottom: 10px;
+  display: flex; justify-content: space-between;
+}
+.np-upload-progress .label .percent { color: #D4AF37; }
+.np-upload-progress .bar {
+  width: 100%; height: 6px;
+  background: rgba(212,175,55,0.15);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.np-upload-progress .bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #D4AF37, #F5D880);
+  border-radius: 3px;
+  transition: width 0.3s ease-out;
+  box-shadow: 0 0 8px rgba(212,175,55,0.6);
+}
+
+/* === Editor de imagen === */
+.np-editor-overlay {
+  position: fixed; inset: 0; z-index: 300;
+  background: rgba(0,0,0,0.92);
+  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0; transition: opacity 0.3s; pointer-events: none;
+}
+.np-editor-overlay.np-visible { opacity: 1; pointer-events: auto; }
+.np-editor {
+  background: linear-gradient(180deg, #1a1410 0%, #0a0707 100%);
+  border: 1px solid rgba(212, 175, 55, 0.4);
+  border-radius: 16px;
+  padding: 24px;
+  width: 95vw; max-width: 1100px;
+  max-height: 90vh;
+  display: flex; flex-direction: column;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.8), 0 0 60px rgba(212,175,55,0.15);
+}
+.np-editor-header {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 16px;
+}
+.np-editor-header h2 {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 24px; font-weight: 400; color: #D4AF37;
+  margin: 0; letter-spacing: 0.05em;
+  background: linear-gradient(180deg, #F5D880 0%, #D4AF37 100%);
+  -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+}
+.np-editor-header .close-btn {
+  background: transparent; border: 1px solid rgba(212,175,55,0.3);
+  color: rgba(245,239,224,0.6); cursor: pointer;
+  width: 32px; height: 32px; border-radius: 50%;
+  font-size: 18px; transition: all 0.2s;
+  display: flex; align-items: center; justify-content: center;
+}
+.np-editor-header .close-btn:hover {
+  border-color: #D4AF37; color: #D4AF37;
+}
+.np-editor-body {
+  display: flex; gap: 20px; flex: 1;
+  min-height: 0;
+}
+.np-editor-canvas {
+  flex: 1;
+  background: #000;
+  border-radius: 12px;
+  overflow: hidden;
+  position: relative;
+  display: flex; align-items: center; justify-content: center;
+  cursor: grab;
+  user-select: none;
+  border: 1px solid rgba(212,175,55,0.2);
+}
+.np-editor-canvas:active { cursor: grabbing; }
+.np-editor-canvas img {
+  max-width: 100%; max-height: 100%;
+  display: block;
+  transform-origin: center center;
+  pointer-events: none;
+  will-change: transform;
+}
+.np-editor-canvas .hint {
+  position: absolute;
+  bottom: 12px; left: 50%; transform: translateX(-50%);
+  background: rgba(0,0,0,0.7);
+  color: rgba(245,239,224,0.7);
+  padding: 6px 12px; border-radius: 4px;
+  font-size: 11px; letter-spacing: 0.1em;
+  pointer-events: none;
+  font-family: 'Inter', sans-serif;
+}
+.np-editor-controls {
+  width: 280px;
+  display: flex; flex-direction: column;
+  gap: 16px;
+  padding: 16px;
+  background: rgba(0,0,0,0.4);
+  border-radius: 12px;
+  border: 1px solid rgba(212,175,55,0.15);
+  font-family: 'Inter', sans-serif;
+}
+.np-editor-controls .control-group {
+  display: flex; flex-direction: column; gap: 8px;
+}
+.np-editor-controls label {
+  font-size: 11px; color: rgba(245,239,224,0.6);
+  letter-spacing: 0.2em; text-transform: uppercase;
+  display: flex; justify-content: space-between;
+}
+.np-editor-controls label .value {
+  color: #D4AF37; font-variant-numeric: tabular-nums;
+}
+.np-editor-controls input[type="range"] {
+  width: 100%;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  background: rgba(212,175,55,0.2);
+  border-radius: 2px;
+  outline: none;
+}
+.np-editor-controls input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px; height: 16px;
+  border-radius: 50%;
+  background: #D4AF37;
+  cursor: pointer;
+  box-shadow: 0 0 8px rgba(212,175,55,0.6);
+}
+.np-editor-controls input[type="range"]::-moz-range-thumb {
+  width: 16px; height: 16px;
+  border-radius: 50%;
+  background: #D4AF37;
+  cursor: pointer;
+  border: none;
+  box-shadow: 0 0 8px rgba(212,175,55,0.6);
+}
+.np-editor-controls .reset-btn {
+  padding: 8px 14px;
+  background: transparent;
+  border: 1px solid rgba(212,175,55,0.3);
+  color: rgba(245,239,224,0.7);
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 11px; letter-spacing: 0.2em;
+  text-transform: uppercase;
+  font-family: 'Inter', sans-serif;
+  transition: all 0.2s;
+}
+.np-editor-controls .reset-btn:hover {
+  background: rgba(212,175,55,0.1);
+  border-color: #D4AF37; color: #D4AF37;
+}
+.np-editor-controls .save-btn {
+  padding: 12px 20px;
+  background: linear-gradient(180deg, #D4AF37 0%, #A8862A 100%);
+  color: #0a0707;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px; letter-spacing: 0.2em;
+  text-transform: uppercase;
+  font-family: 'Inter', sans-serif;
+  font-weight: 500;
+  transition: all 0.2s;
+  margin-top: auto;
+}
+.np-editor-controls .save-btn:hover {
+  box-shadow: 0 0 20px rgba(212,175,55,0.5);
+  transform: translateY(-1px);
+}
+.np-editor-controls .save-btn:disabled {
+  opacity: 0.4; cursor: not-allowed;
+  transform: none;
+}
 .np-modal .actions {
   display: flex; gap: 12px; margin-top: 24px; justify-content: flex-end;
 }
@@ -1174,22 +1378,47 @@ export default function AnimacionPedida() {
     document.head.appendChild(style)
   }, [])
 
-  // Manejar upload
+  // Manejar upload - con progreso
+  const [uploadProgress, setUploadProgress] = useState(0)
+  const [uploadFileName, setUploadFileName] = useState('')
+
   const handleFileSelect = useCallback(async (files: FileList | null) => {
     if (!files || files.length === 0) return
     setUploading(true)
+    setUploadProgress(0)
+    setUploadFileName(files.length === 1 ? files[0].name : `${files.length} archivos`)
     try {
-      const result = await uploadFiles(Array.from(files))
+      const result = await uploadFiles(Array.from(files), (percent, fileName) => {
+        setUploadProgress(percent)
+        setUploadFileName(fileName)
+      })
       if (result.success) {
-        showToast(`✓ ${result.uploaded?.length || 0} archivo(s) subido(s)`, 'success')
+        const successCount = result.uploaded?.length || 0
+        const errorCount = result.errors?.length || 0
+        if (errorCount > 0) {
+          showToast(`✓ ${successCount} subidos, ✗ ${errorCount} con error`, 'info')
+        } else {
+          showToast(`✓ ${successCount} archivo(s) subido(s) correctamente`, 'success')
+        }
         await loadGallery()
       } else {
-        showToast(`Error: ${result.message}`, 'error')
+        // Mensaje de error más específico
+        const errMsg = result.message || 'Error desconocido'
+        if (errMsg.includes('Timeout') || errMsg.includes('tardó')) {
+          showToast('El archivo es muy grande o la conexión es lenta. Intenta de nuevo.', 'error')
+        } else if (errMsg.includes('network') || errMsg.includes('red')) {
+          showToast('Error de red. Verifica tu conexión a internet.', 'error')
+        } else {
+          showToast(`Error: ${errMsg}`, 'error')
+        }
       }
     } catch (err) {
-      showToast('Error al subir archivos', 'error')
+      const errMsg = err instanceof Error ? err.message : 'Error desconocido'
+      showToast(`Error al subir: ${errMsg}`, 'error')
     } finally {
       setUploading(false)
+      setUploadProgress(0)
+      setUploadFileName('')
       if (fileInputRef.current) fileInputRef.current.value = ''
     }
   }, [loadGallery, showToast])
@@ -1227,6 +1456,98 @@ export default function AnimacionPedida() {
       showToast(`Error: ${result.message}`, 'error')
     }
   }, [loadGallery, showToast])
+
+  // === Editor de imagen ===
+  const [editingItem, setEditingItem] = useState<GalleryItem | null>(null)
+  const [editorSettings, setEditorSettings] = useState<ImageSettings>({ pan_x: 0, pan_y: 0, zoom: 1 })
+  const [editorDragging, setEditorDragging] = useState(false)
+  const [editorSaving, setEditorSaving] = useState(false)
+  const editorDragStartRef = useRef<{ x: number; y: number; pan_x: number; pan_y: number } | null>(null)
+  const editorCanvasRef = useRef<HTMLDivElement>(null)
+
+  // Abrir editor
+  const openEditor = useCallback((item: GalleryItem) => {
+    if (item.type !== 'image') {
+      showToast('Solo se pueden editar fotos, no videos', 'info')
+      return
+    }
+    setEditingItem(item)
+    setEditorSettings(item.image_settings || { pan_x: 0, pan_y: 0, zoom: 1 })
+  }, [showToast])
+
+  // Cerrar editor
+  const closeEditor = useCallback(() => {
+    setEditingItem(null)
+    setEditorDragging(false)
+    editorDragStartRef.current = null
+  }, [])
+
+  // Drag para pan
+  const handleEditorMouseDown = useCallback((e: React.MouseEvent) => {
+    setEditorDragging(true)
+    editorDragStartRef.current = {
+      x: e.clientX,
+      y: e.clientY,
+      pan_x: editorSettings.pan_x,
+      pan_y: editorSettings.pan_y
+    }
+  }, [editorSettings])
+
+  const handleEditorMouseMove = useCallback((e: React.MouseEvent) => {
+    if (!editorDragging || !editorDragStartRef.current) return
+    const canvas = editorCanvasRef.current
+    if (!canvas) return
+    const rect = canvas.getBoundingClientRect()
+    // Calcular delta en porcentaje del canvas
+    const dx = ((e.clientX - editorDragStartRef.current.x) / rect.width) * 100
+    const dy = ((e.clientY - editorDragStartRef.current.y) / rect.height) * 100
+    // Aplicar inverso al pan (arrastrar derecha = imagen se mueve derecha)
+    // Pero en la pantalla final, el pan_x positivo mueve la imagen a la derecha
+    // así que aquí arrastrar derecha debería aumentar pan_x
+    const newPanX = Math.max(-100, Math.min(100, editorDragStartRef.current.pan_x + dx))
+    const newPanY = Math.max(-100, Math.min(100, editorDragStartRef.current.pan_y + dy))
+    setEditorSettings(prev => ({ ...prev, pan_x: newPanX, pan_y: newPanY }))
+  }, [editorDragging])
+
+  const handleEditorMouseUp = useCallback(() => {
+    setEditorDragging(false)
+    editorDragStartRef.current = null
+  }, [])
+
+  // Wheel para zoom
+  const handleEditorWheel = useCallback((e: React.WheelEvent) => {
+    e.preventDefault()
+    const delta = -e.deltaY * 0.001
+    setEditorSettings(prev => ({
+      ...prev,
+      zoom: Math.max(1, Math.min(3, prev.zoom + delta))
+    }))
+  }, [])
+
+  // Reset
+  const resetEditor = useCallback(() => {
+    setEditorSettings({ pan_x: 0, pan_y: 0, zoom: 1 })
+  }, [])
+
+  // Guardar
+  const saveEditorSettings = useCallback(async () => {
+    if (!editingItem) return
+    setEditorSaving(true)
+    const result = await updateImageSettings(editingItem.filename, editorSettings)
+    if (result.success) {
+      showToast('✓ Ajustes guardados', 'success')
+      // Actualizar la galería localmente
+      setGalleryItems(prev => prev.map(item =>
+        item.filename === editingItem.filename
+          ? { ...item, image_settings: editorSettings }
+          : item
+      ))
+      closeEditor()
+    } else {
+      showToast(`Error: ${result.message}`, 'error')
+    }
+    setEditorSaving(false)
+  }, [editingItem, editorSettings, showToast, closeEditor])
 
   // Stats de la galería
   const imageCount = galleryItems.filter(i => i.type === 'image').length
@@ -1300,7 +1621,14 @@ export default function AnimacionPedida() {
             id={sceneId}
             ref={el => { sceneElementsRef.current[sceneId] = el }}
           >
-            <div className="np-media-frame">
+            <div
+              className="np-media-frame"
+              style={item.image_settings && !isVideo ? {
+                // Aplicar zoom del usuario al contenedor (la imagen conserva Ken Burns)
+                transform: `scale(${item.image_settings.zoom})`,
+                transformOrigin: `${50 + item.image_settings.pan_x / 2}% ${30 + item.image_settings.pan_y / 2}%`
+              } : undefined}
+            >
               {isVideo ? (
                 <video
                   ref={el => { videoElementsRef.current[sceneId] = el }}
@@ -1312,7 +1640,14 @@ export default function AnimacionPedida() {
                 />
               ) : (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img className="np-media-img" src={item.path} alt={item.caption || 'Foto'} />
+                <img
+                  className="np-media-img"
+                  src={item.path}
+                  alt={item.caption || 'Foto'}
+                  style={item.image_settings ? {
+                    objectPosition: `${50 + item.image_settings.pan_x / 2}% ${30 + item.image_settings.pan_y / 2}%`
+                  } : undefined}
+                />
               )}
               <div className="np-media-overlay"></div>
             </div>
@@ -1442,9 +1777,23 @@ export default function AnimacionPedida() {
                     <div className="name">{item.caption || item.filename}</div>
                     <div className="meta">
                       {(item.size / 1024).toFixed(0)} KB · {item.filename}
+                      {item.image_settings && (
+                        <span style={{ color: '#D4AF37', marginLeft: 8 }}>
+                          · ajustada
+                        </span>
+                      )}
                     </div>
                   </div>
                   <span className={`badge ${item.type}`}>{item.type === 'image' ? 'Foto' : 'Video'}</span>
+                  {item.type === 'image' && (
+                    <button
+                      className="edit-btn"
+                      onClick={() => openEditor(item)}
+                      title="Ajustar imagen (pan y zoom)"
+                    >
+                      Editar
+                    </button>
+                  )}
                   <button
                     className="delete-btn"
                     onClick={() => handleDelete(item.filename)}
@@ -1475,10 +1824,116 @@ export default function AnimacionPedida() {
         </div>
       </div>
 
+      {/* Barra de progreso de upload */}
+      {uploading && (
+        <div className="np-upload-progress">
+          <div className="label">
+            <span>Subiendo: {uploadFileName}</span>
+            <span className="percent">{uploadProgress.toFixed(0)}%</span>
+          </div>
+          <div className="bar">
+            <div className="bar-fill" style={{ width: `${uploadProgress}%` }}></div>
+          </div>
+        </div>
+      )}
+
       {/* Toast */}
       {toast && (
         <div className={`np-toast visible ${toast.type}`}>
           {toast.message}
+        </div>
+      )}
+
+      {/* Editor de imagen */}
+      {editingItem && (
+        <div
+          className="np-editor-overlay np-visible"
+          onMouseUp={handleEditorMouseUp}
+          onMouseLeave={handleEditorMouseUp}
+        >
+          <div className="np-editor">
+            <div className="np-editor-header">
+              <h2>Ajustar imagen</h2>
+              <button
+                className="close-btn"
+                onClick={closeEditor}
+                title="Cerrar"
+              >
+                ×
+              </button>
+            </div>
+            <div className="np-editor-body">
+              <div
+                className="np-editor-canvas"
+                ref={editorCanvasRef}
+                onMouseDown={handleEditorMouseDown}
+                onMouseMove={handleEditorMouseMove}
+                onWheel={handleEditorWheel}
+                style={{
+                  backgroundImage: `url(${editingItem.path})`,
+                  backgroundPosition: `${50 + editorSettings.pan_x / 2}% ${30 + editorSettings.pan_y / 2}%`,
+                  backgroundSize: `${editorSettings.zoom * 100}%`,
+                  backgroundRepeat: 'no-repeat'
+                }}
+              >
+                <div className="hint">Arrastra para mover · Rueda para zoom</div>
+              </div>
+              <div className="np-editor-controls">
+                <div className="control-group">
+                  <label>
+                    <span>Posición X</span>
+                    <span className="value">{editorSettings.pan_x.toFixed(0)}</span>
+                  </label>
+                  <input
+                    type="range"
+                    min={-100}
+                    max={100}
+                    step={1}
+                    value={editorSettings.pan_x}
+                    onChange={(e) => setEditorSettings(prev => ({ ...prev, pan_x: Number(e.target.value) }))}
+                  />
+                </div>
+                <div className="control-group">
+                  <label>
+                    <span>Posición Y</span>
+                    <span className="value">{editorSettings.pan_y.toFixed(0)}</span>
+                  </label>
+                  <input
+                    type="range"
+                    min={-100}
+                    max={100}
+                    step={1}
+                    value={editorSettings.pan_y}
+                    onChange={(e) => setEditorSettings(prev => ({ ...prev, pan_y: Number(e.target.value) }))}
+                  />
+                </div>
+                <div className="control-group">
+                  <label>
+                    <span>Zoom</span>
+                    <span className="value">{editorSettings.zoom.toFixed(2)}x</span>
+                  </label>
+                  <input
+                    type="range"
+                    min={1}
+                    max={3}
+                    step={0.01}
+                    value={editorSettings.zoom}
+                    onChange={(e) => setEditorSettings(prev => ({ ...prev, zoom: Number(e.target.value) }))}
+                  />
+                </div>
+                <button className="reset-btn" onClick={resetEditor}>
+                  Restablecer
+                </button>
+                <button
+                  className="save-btn"
+                  onClick={saveEditorSettings}
+                  disabled={editorSaving}
+                >
+                  {editorSaving ? 'Guardando...' : 'Guardar ajustes'}
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>

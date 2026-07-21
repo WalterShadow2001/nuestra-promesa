@@ -33,8 +33,15 @@ export interface MediaItem {
   type: MediaType
   caption: string | null
   size: number
+  image_settings?: ImageSettings | null
   data?: Uint8Array  // Solo al leer individualmente
   created_at: number
+}
+
+export interface ImageSettings {
+  pan_x: number  // -100 a 100 (porcentaje)
+  pan_y: number  // -100 a 100 (porcentaje)
+  zoom: number   // 1.0 a 3.0
 }
 
 // Captions por defecto que se ciclan
@@ -96,7 +103,7 @@ export function cleanCaption(filename: string): string {
 export async function listMediaItems(): Promise<MediaItem[]> {
   const client = getTursoClient()
   const result = await client.execute({
-    sql: `SELECT id, filename, original_name, mime_type, type, caption, size, created_at
+    sql: `SELECT id, filename, original_name, mime_type, type, caption, size, image_settings, created_at
           FROM media_items
           ORDER BY filename COLLATE NOCASE ASC`
   })
@@ -105,6 +112,15 @@ export async function listMediaItems(): Promise<MediaItem[]> {
   let defaultIdx = 0
 
   for (const row of result.rows) {
+    let imageSettings: ImageSettings | null = null
+    if (row.image_settings) {
+      try {
+        imageSettings = JSON.parse(row.image_settings as string)
+      } catch {
+        imageSettings = null
+      }
+    }
+
     const item: MediaItem = {
       id: row.id as number,
       filename: row.filename as string,
@@ -113,12 +129,12 @@ export async function listMediaItems(): Promise<MediaItem[]> {
       type: row.type as MediaType,
       caption: (row.caption as string) || null,
       size: row.size as number,
+      image_settings: imageSettings,
       created_at: row.created_at as number
     }
 
     // Si no tiene caption, asignar uno por defecto
     if (!item.caption) {
-      // Primero intentar extraer del nombre del archivo
       const fileCaption = cleanCaption(item.filename)
       if (fileCaption) {
         item.caption = fileCaption
@@ -189,6 +205,19 @@ export async function deleteMediaItem(filename: string): Promise<boolean> {
   const result = await client.execute({
     sql: `DELETE FROM media_items WHERE filename = ?`,
     args: [filename]
+  })
+  return (result.rowsAffected || 0) > 0
+}
+
+// Actualizar ajustes de imagen (pan/zoom) para un item
+export async function updateImageSettings(
+  filename: string,
+  settings: ImageSettings
+): Promise<boolean> {
+  const client = getTursoClient()
+  const result = await client.execute({
+    sql: `UPDATE media_items SET image_settings = ? WHERE filename = ?`,
+    args: [JSON.stringify(settings), filename]
   })
   return (result.rowsAffected || 0) > 0
 }
