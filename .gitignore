@@ -65,8 +65,8 @@ dev.log
 # Skills del sistema (no son parte del proyecto)
 skills/
 
-# Archivos subidos por el usuario (se pierden al reset)
-upload/
+# Archivos subidos por el usuario (carpeta raíz, NO src/app/api/upload)
+/upload/
 
 # Examples internos del scaffold
 examples/
