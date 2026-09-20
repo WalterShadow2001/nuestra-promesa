@@ -100,14 +100,14 @@ html, body {
   min-height: 100vh; padding: 40px 20px;
 }
 .np-home-logo {
-  position: relative; width: min(280px, 50vw); height: auto;
+  position: relative; width: min(280px, 60vw); height: min(280px, 60vw);
   display: flex; align-items: center; justify-content: center;
   margin-bottom: 40px;
 }
 .np-home-logo-ring {
   position: absolute; top: 50%; left: 50%;
   transform: translate(-50%, -50%);
-  width: 280px; height: 280px;
+  width: 100%; height: 100%;
   border: 1px solid rgba(184,148,95,0.4);
   border-radius: 50%;
   pointer-events: none;
@@ -115,7 +115,7 @@ html, body {
 .np-home-logo-ring-2 {
   position: absolute; top: 50%; left: 50%;
   transform: translate(-50%, -50%);
-  width: 240px; height: 240px;
+  width: 85%; height: 85%;
   border: 1px dashed rgba(184,148,95,0.2);
   border-radius: 50%;
   pointer-events: none;
@@ -170,22 +170,24 @@ html, body {
 }
 
 .np-home-buttons {
-  display: flex; gap: 24px; flex-wrap: wrap; justify-content: center;
+  display: flex; gap: 20px; flex-wrap: wrap; justify-content: center;
+  width: 100%; max-width: 500px;
 }
 .np-btn {
   position: relative;
-  padding: 18px 36px;
+  padding: 16px 32px;
   background: transparent;
   border: 1px solid #B8945F;
   color: #2A2620;
   font-family: 'Cormorant Garamond', serif;
-  font-size: clamp(16px, 1.5vw, 20px);
-  letter-spacing: 0.25em;
+  font-size: clamp(15px, 1.5vw, 20px);
+  letter-spacing: 0.2em;
   text-transform: uppercase;
   cursor: pointer;
   transition: all 0.4s ease;
   overflow: hidden;
-  min-width: 220px;
+  flex: 1 1 200px;
+  min-width: 160px;
   font-weight: 400;
 }
 .np-btn::before {
@@ -216,26 +218,33 @@ html, body {
 /* === Admin Lock (solo desktop) === */
 .np-admin-lock {
   position: fixed;
-  bottom: 20px; left: 20px;
+  bottom: 24px; left: 24px;
   z-index: 100;
-  width: 36px; height: 36px;
-  background: transparent;
-  border: none;
-  color: rgba(184,148,95,0.3);
+  width: 44px; height: 44px;
+  background: rgba(250,250,247,0.7);
+  border: 1px solid rgba(184,148,95,0.4);
+  border-radius: 50%;
+  color: #B8945F;
   cursor: pointer;
   display: flex; align-items: center; justify-content: center;
   transition: all 0.3s;
   padding: 0;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  box-shadow: 0 2px 12px rgba(42,38,32,0.1);
 }
 .np-admin-lock:hover {
-  color: #B8945F;
+  color: #8B6B3F;
   transform: scale(1.1);
+  background: rgba(184,148,95,0.15);
+  border-color: #B8945F;
+  box-shadow: 0 4px 20px rgba(184,148,95,0.3);
 }
 .np-admin-lock svg {
-  width: 24px; height: 24px;
+  width: 22px; height: 22px;
 }
-/* Solo visible en desktop (con hover) */
-@media (hover: none), (max-width: 768px) {
+/* Ocultar solo en dispositivos táctiles (móvil/tablet) */
+@media (hover: none) and (pointer: coarse) {
   .np-admin-lock { display: none !important; }
 }
 
@@ -252,11 +261,12 @@ html, body {
   background: #FFFEF9;
   border: 1px solid rgba(184,148,95,0.3);
   border-radius: 16px;
-  padding: 40px;
-  max-width: 560px; width: 90vw;
+  padding: clamp(20px, 5vw, 40px);
+  max-width: 560px; width: 92vw;
   max-height: 90vh; overflow-y: auto;
   box-shadow: 0 20px 60px rgba(42,38,32,0.15);
   font-family: 'Inter', sans-serif;
+  margin: 16px;
 }
 .np-modal h2 {
   font-family: 'Cormorant Garamond', serif;
@@ -475,37 +485,70 @@ html, body {
   background: rgba(184,148,95,0.1);
   border-color: #B8945F;
 }
+.np-slideshow-hint {
+  position: fixed; bottom: 24px; right: 24px; z-index: 200;
+  font-family: 'Inter', sans-serif;
+  font-size: 11px; letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: rgba(250,250,247,0.5);
+  pointer-events: none;
+  animation: npHintPulse 3s ease-in-out infinite;
+}
+@keyframes npHintPulse {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 0.7; }
+}
 
 .np-slide {
   position: absolute; inset: 0;
   display: flex; align-items: center; justify-content: center;
   opacity: 0; pointer-events: none;
   will-change: opacity, transform;
+  cursor: pointer;
 }
-.np-slide.np-active { opacity: 1; }
+.np-slide.np-active { opacity: 1; pointer-events: auto; }
 .np-slide-frame {
   position: absolute; inset: 0; overflow: hidden;
+  background: #1a1a1a;
 }
+/* Fondo borroso de la misma imagen/video (llena la pantalla, recortado) */
+.np-slide-bg {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  object-fit: cover;
+  filter: blur(50px) brightness(0.4) saturate(1.5);
+  transform: scale(1.3);
+  z-index: 0;
+  pointer-events: none;
+}
+/* Imagen/video principal - se ve COMPLETO sin recorte (contain) */
 .np-slide-img, .np-slide-video {
-  position: absolute; inset: -8%; width: 116%; height: 116%;
-  object-fit: cover; will-change: transform;
-  filter: brightness(0.95) contrast(1.05) saturate(0.95);
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  object-fit: contain;
+  z-index: 1;
+  will-change: transform;
+  filter: brightness(1.0) contrast(1.05) saturate(1.0);
 }
 .np-slide-overlay {
   position: absolute; inset: 0;
   background: linear-gradient(to bottom,
-    rgba(42,38,32,0.2) 0%,
-    rgba(42,38,32,0) 25%,
-    rgba(42,38,32,0) 55%,
-    rgba(42,38,32,0.5) 80%,
-    rgba(42,38,32,0.85) 100%);
+    rgba(0,0,0,0.15) 0%,
+    rgba(0,0,0,0) 20%,
+    rgba(0,0,0,0) 60%,
+    rgba(0,0,0,0.4) 85%,
+    rgba(0,0,0,0.7) 100%);
   pointer-events: none;
+  z-index: 2;
 }
 .np-slide-caption {
-  position: absolute; bottom: 12vh; left: 50%;
+  position: absolute; bottom: 10vh; left: 50%;
   transform: translateX(-50%);
   text-align: center; z-index: 6;
   white-space: nowrap;
+  max-width: 90vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .np-slide-caption .divider {
   display: inline-block; width: 60px; height: 1px;
@@ -935,16 +978,31 @@ function Slideshow({ photos, onExit }: {
 
   return (
     <div className="np-slideshow">
-      <button className="np-slideshow-exit" onClick={onExit} title="Salir (ESC)">×</button>
+      <button className="np-slideshow-exit" onClick={(e) => { e.stopPropagation(); onExit() }} title="Salir (ESC)">×</button>
+      <div className="np-slideshow-hint">Click para avanzar</div>
       {scenes.map((scene) => (
         <div
           key={scene.id}
           className="np-slide"
           ref={el => { sceneElsRef.current[scene.id] = el }}
+          onClick={() => {
+            // Click para avanzar a la siguiente escena
+            const currentIdx = scenes.findIndex(s => s.id === scene.id)
+            if (currentIdx >= 0 && currentIdx < scenes.length - 1) {
+              setCurrentTime(scenes[currentIdx + 1].start + 0.05)
+            } else if (currentIdx === scenes.length - 1) {
+              // Última escena - salir
+              onExit()
+            }
+          }}
         >
           {scene.type === 'photo' && (
             <>
               <div className="np-slide-frame">
+                {/* Fondo borroso de la misma imagen */}
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img className="np-slide-bg" src={scene.photo!.path} alt="" />
+                {/* Imagen principal - se ve completa sin recorte */}
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img className="np-slide-img" src={scene.photo!.path} alt={scene.caption || 'Foto'} />
                 <div className="np-slide-overlay"></div>
@@ -961,6 +1019,17 @@ function Slideshow({ photos, onExit }: {
           {scene.type === 'video' && (
             <>
               <div className="np-slide-frame">
+                {/* Fondo borroso del mismo video */}
+                <video
+                  className="np-slide-bg"
+                  src={scene.photo!.path}
+                  muted
+                  loop
+                  autoPlay
+                  playsInline
+                  preload="auto"
+                />
+                {/* Video principal - se ve completo sin recorte */}
                 <video
                   ref={el => { videoElsRef.current[scene.id] = el }}
                   className="np-slide-video"
