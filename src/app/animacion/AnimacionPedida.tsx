@@ -104,9 +104,11 @@ html, body {
 .np-home-logo {
   position: relative;
   width: min(220px, 50vw);
-  height: min(220px, 50vw);
+  aspect-ratio: 1 / 1;
   display: flex; align-items: center; justify-content: center;
-  margin-bottom: 28px;
+  margin-bottom: 24px;
+  cursor: pointer;
+  border-radius: 50%;
 }
 .np-home-logo-ring {
   position: absolute; top: 50%; left: 50%;
@@ -161,7 +163,7 @@ html, body {
 }
 .np-home-ornament {
   display: flex; align-items: center; justify-content: center;
-  gap: 16px; margin: 32px 0 60px 0; opacity: 0.7;
+  gap: 16px; margin: 20px 0 40px 0; opacity: 0.7;
 }
 .np-home-ornament .line {
   width: 60px; height: 1px;
@@ -638,6 +640,9 @@ html, body {
   background: #000;
 }
 .np-slide.np-active { opacity: 1; pointer-events: auto; }
+.np-slide.np-align-left { justify-content: flex-start; }
+.np-slide.np-align-right { justify-content: flex-end; }
+.np-slide.np-align-center { justify-content: center; }
 .np-slide-frame {
   position: absolute; inset: 0; overflow: hidden;
   background: #000;
@@ -657,7 +662,7 @@ html, body {
 /* Imagen/video principal - se ve COMPLETO sin recorte (contain) */
 .np-slide-img, .np-slide-video {
   position: relative;
-  max-width: 100%; max-height: 100%;
+  max-width: 95%; max-height: 95%;
   width: auto; height: auto;
   object-fit: contain;
   z-index: 1;
@@ -665,7 +670,8 @@ html, body {
   filter: brightness(1.0) contrast(1.0) saturate(1.0);
   opacity: 1;
   transition: opacity 0.5s;
-  /* Importante: sin position absolute para que flex center funcione */
+  margin: auto;
+  display: block;
 }
 .np-slide-img.np-loading, .np-slide-video.np-loading { opacity: 0; }
 /* Loader mientras carga */
@@ -873,18 +879,23 @@ function shuffle<T>(arr: T[]): T[] {
 // ============================================================
 // Componente: Home Screen
 // ============================================================
-function HomeScreen({ onSlideshow, onUpload }: {
+function HomeScreen({ onSlideshow, onUpload, onLogoClick }: {
   onSlideshow: () => void
   onUpload: () => void
+  onLogoClick: () => void
 }) {
   return (
     <div className="np-home">
-      <div className="np-home-logo">
+      <div
+        className="np-home-logo"
+        onClick={onLogoClick}
+        title=""
+        role="presentation"
+      >
         <div className="np-home-logo-ring"></div>
         <div className="np-home-logo-ring-2"></div>
-        <div className="np-home-initials">D&W</div>
+        <div className="np-home-initials">D&amp;W</div>
       </div>
-      <div className="np-home-name">D &amp; W</div>
       <div className="np-home-date">{CONFIG.couple.eventDate}</div>
       <div className="np-home-ornament">
         <div className="line"></div>
@@ -999,6 +1010,7 @@ function Slideshow({ photos, onExit }: {
     type: 'photo' | 'video' | 'final'
     photo?: PhotoItem
     caption?: string
+    align?: 'left' | 'center' | 'right'
     start: number
     end: number
     transitionIn: number
@@ -1008,14 +1020,18 @@ function Slideshow({ photos, onExit }: {
   useEffect(() => {
     scenes.length = 0
     let total = 0
+    const aligns: Array<'left' | 'center' | 'right'> = ['left', 'center', 'right']
     shuffledPhotos.forEach((p, i) => {
       const isVideo = p.type === 'video'
       const duration = isVideo ? 12 : tl.photoDuration
+      // Alineación aleatoria para fotos (videos siempre centrados)
+      const align = isVideo ? 'center' : aligns[Math.floor(Math.random() * aligns.length)]
       scenes.push({
         id: `scene-${loopCount}-${i}`,
         type: isVideo ? 'video' : 'photo',
         photo: p,
         caption: p.caption,
+        align,
         start: total,
         end: total + duration,
         transitionIn: tl.photoTransition,
@@ -1198,7 +1214,7 @@ function Slideshow({ photos, onExit }: {
       {scenes.map((scene) => (
         <div
           key={scene.id}
-          className="np-slide"
+          className={`np-slide np-align-${scene.align || 'center'}`}
           ref={el => { sceneElsRef.current[scene.id] = el }}
           onClick={() => {
             // Click para avanzar a la siguiente escena
@@ -1774,6 +1790,30 @@ export default function AnimacionPedida() {
   // Handlers
   const handleSlideshow = useCallback(() => setMode('slideshow'), [])
   const handleUpload = useCallback(() => setShowUpload(true), [])
+
+  // Click counter para logo (5 clicks en 2 segundos = admin)
+  const logoClickCountRef = useRef(0)
+  const logoClickTimerRef = useRef<number | null>(null)
+  const handleLogoClick = useCallback(() => {
+    logoClickCountRef.current++
+    if (logoClickTimerRef.current) {
+      clearTimeout(logoClickTimerRef.current)
+    }
+    logoClickTimerRef.current = window.setTimeout(() => {
+      logoClickCountRef.current = 0
+    }, 2000)
+
+    if (logoClickCountRef.current >= 5) {
+      logoClickCountRef.current = 0
+      if (logoClickTimerRef.current) {
+        clearTimeout(logoClickTimerRef.current)
+        logoClickTimerRef.current = null
+      }
+      if (adminToken) setShowAdminPanel(true)
+      else setShowAdminLogin(true)
+    }
+  }, [adminToken])
+
   const handleAdminOpen = useCallback(() => {
     if (adminToken) setShowAdminPanel(true)
     else setShowAdminLogin(true)
@@ -1805,7 +1845,11 @@ export default function AnimacionPedida() {
 
       {/* Home screen */}
       {mode === 'home' && (
-        <HomeScreen onSlideshow={handleSlideshow} onUpload={handleUpload} />
+        <HomeScreen
+          onSlideshow={handleSlideshow}
+          onUpload={handleUpload}
+          onLogoClick={handleLogoClick}
+        />
       )}
 
       {/* Slideshow */}
@@ -1814,11 +1858,6 @@ export default function AnimacionPedida() {
           photos={photos}
           onExit={() => setMode('home')}
         />
-      )}
-
-      {/* Admin Lock (solo desktop) */}
-      {mode === 'home' && (
-        <AdminLock onOpenAdmin={handleAdminOpen} />
       )}
 
       {/* Upload Modal */}
