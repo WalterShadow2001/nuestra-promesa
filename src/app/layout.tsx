@@ -14,13 +14,13 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Nuestra Promesa — D & W",
-  description: "Animación en bucle para la pantalla de nuestra pedida de mano.",
-  keywords: ["pedida", "matrimonio", "D & W", "Nuestra Promesa"],
+  title: "Boda D & W · 26 Septiembre 2026",
+  description: "Comparte tus fotos de nuestra boda civil — D & W",
+  keywords: ["boda", "matrimonio", "D & W", "boda civil"],
   authors: [{ name: "D & W" }],
   openGraph: {
-    title: "Nuestra Promesa — D & W",
-    description: "Animación en bucle para la pantalla de nuestra pedida de mano.",
+    title: "Boda D & W",
+    description: "Comparte tus fotos de nuestra boda civil",
     type: "website",
   },
 };
