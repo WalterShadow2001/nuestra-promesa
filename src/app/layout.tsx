@@ -14,12 +14,12 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Boda D & W · 26 Septiembre 2026",
-  description: "Comparte tus fotos de nuestra boda civil — D & W",
-  keywords: ["boda", "matrimonio", "D & W", "boda civil"],
-  authors: [{ name: "D & W" }],
+  title: "Album Boda Dariana & Walter",
+  description: "Album de fotos de la boda de Dariana & Walter — 26 de Septiembre, 2026",
+  keywords: ["boda", "album", "Dariana", "Walter", "boda civil"],
+  authors: [{ name: "Dariana & Walter" }],
   openGraph: {
-    title: "Boda D & W",
+    title: "Album Boda Dariana & Walter",
     description: "Comparte tus fotos de nuestra boda civil",
     type: "website",
   },

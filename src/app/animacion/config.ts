@@ -4,10 +4,10 @@ export const CONFIG = {
   // === Identidad ===
   couple: {
     initials: "D & W",
-    names: "D & W",
+    names: "Dariana & Walter",
     eventDate: "26 de Septiembre, 2026",
     eventName: "Boda Civil",
-    hashtag: "#NuestraBoda"
+    hashtag: "#BodaDarianaWalter"
   },
 
   // === Storage ===
