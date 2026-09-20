@@ -97,12 +97,16 @@ html, body {
   position: relative; z-index: 10;
   display: flex; flex-direction: column;
   align-items: center; justify-content: center;
-  min-height: 100vh; padding: 40px 20px;
+  min-height: 100vh; padding: 60px 24px;
+  max-width: 600px;
+  margin: 0 auto;
 }
 .np-home-logo {
-  position: relative; width: min(280px, 60vw); height: min(280px, 60vw);
+  position: relative;
+  width: min(220px, 50vw);
+  height: min(220px, 50vw);
   display: flex; align-items: center; justify-content: center;
-  margin-bottom: 40px;
+  margin-bottom: 28px;
 }
 .np-home-logo-ring {
   position: absolute; top: 50%; left: 50%;
@@ -327,6 +331,132 @@ html, body {
   background: rgba(184,148,95,0.1);
   border-color: #B8945F;
 }
+.np-modal .btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.np-modal .btn-primary {
+  background: linear-gradient(135deg, #B8945F 0%, #8B6B3F 100%);
+  color: #FAFAF7;
+  border-color: transparent;
+  font-weight: 500;
+}
+.np-modal .btn-primary:hover {
+  background: linear-gradient(135deg, #8B6B3F 0%, #B8945F 100%);
+  box-shadow: 0 4px 20px rgba(184,148,95,0.4);
+}
+.np-modal .btn-primary:disabled {
+  opacity: 0.5;
+  background: rgba(184,148,95,0.3);
+}
+
+/* === Upload modal - lista de archivos pendientes === */
+.np-upload-modal {
+  max-width: 640px;
+}
+.np-pending-list {
+  margin-top: 20px;
+  max-height: 50vh;
+  overflow-y: auto;
+  border: 1px solid rgba(184,148,95,0.15);
+  border-radius: 8px;
+  background: rgba(184,148,95,0.03);
+}
+.np-pending-header {
+  padding: 12px 16px;
+  font-size: 12px; letter-spacing: 0.15em;
+  color: rgba(42,38,32,0.6);
+  text-transform: uppercase;
+  border-bottom: 1px solid rgba(184,148,95,0.15);
+  background: rgba(184,148,95,0.05);
+}
+.np-pending-item {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid rgba(184,148,95,0.08);
+}
+.np-pending-item:last-child { border-bottom: none; }
+.np-pending-thumb {
+  position: relative;
+  width: 60px; height: 60px;
+  border-radius: 6px;
+  overflow: hidden;
+  background: rgba(184,148,95,0.1);
+  border: 1px solid rgba(184,148,95,0.2);
+  flex-shrink: 0;
+}
+.np-pending-thumb img, .np-pending-thumb video {
+  width: 100%; height: 100%; object-fit: cover;
+}
+.np-pending-badge {
+  position: absolute; top: 2px; right: 2px;
+  padding: 1px 6px;
+  background: rgba(0,0,0,0.7);
+  color: #B8945F;
+  font-size: 9px; letter-spacing: 0.1em;
+  text-transform: uppercase;
+  border-radius: 3px;
+  font-family: 'Inter', sans-serif;
+}
+.np-pending-badge.video { color: #ff9999; }
+.np-pending-info {
+  flex: 1; min-width: 0;
+  display: flex; flex-direction: column; gap: 4px;
+}
+.np-pending-label {
+  font-size: 10px; letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: rgba(42,38,32,0.5);
+  font-family: 'Inter', sans-serif;
+}
+.np-pending-input {
+  width: 100%;
+  padding: 6px 10px;
+  background: rgba(184,148,95,0.05);
+  border: 1px solid rgba(184,148,95,0.2);
+  border-radius: 4px;
+  font-family: 'Inter', sans-serif;
+  font-size: 13px;
+  color: #2A2620;
+  outline: none;
+  transition: all 0.2s;
+}
+.np-pending-input:focus {
+  border-color: #B8945F;
+  background: #FFFEF9;
+  box-shadow: 0 0 0 2px rgba(184,148,95,0.1);
+}
+.np-pending-input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.np-pending-meta {
+  font-size: 10px;
+  color: rgba(42,38,32,0.4);
+  font-family: 'Inter', sans-serif;
+}
+.np-pending-remove {
+  width: 28px; height: 28px;
+  background: transparent;
+  border: 1px solid rgba(180,80,80,0.3);
+  color: rgba(180,80,80,0.7);
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 16px;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.2s;
+  flex-shrink: 0;
+  padding: 0;
+}
+.np-pending-remove:hover {
+  background: rgba(180,80,80,0.1);
+  border-color: rgba(180,80,80,0.6);
+  color: rgba(180,80,80,1);
+}
+.np-pending-remove:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
 
 /* === Login admin === */
 .np-login-input {
@@ -503,41 +633,60 @@ html, body {
   position: absolute; inset: 0;
   display: flex; align-items: center; justify-content: center;
   opacity: 0; pointer-events: none;
-  will-change: opacity, transform;
+  will-change: opacity;
   cursor: pointer;
+  background: #000;
 }
 .np-slide.np-active { opacity: 1; pointer-events: auto; }
 .np-slide-frame {
   position: absolute; inset: 0; overflow: hidden;
-  background: #1a1a1a;
+  background: #000;
 }
 /* Fondo borroso de la misma imagen/video (llena la pantalla, recortado) */
 .np-slide-bg {
-  position: absolute; inset: 0;
-  width: 100%; height: 100%;
+  position: absolute; inset: -10%;
+  width: 120%; height: 120%;
   object-fit: cover;
-  filter: blur(50px) brightness(0.4) saturate(1.5);
-  transform: scale(1.3);
+  filter: blur(40px) brightness(0.5) saturate(1.3);
   z-index: 0;
   pointer-events: none;
+  opacity: 1;
+  transition: opacity 0.5s;
 }
+.np-slide-bg.np-loading { opacity: 0; }
 /* Imagen/video principal - se ve COMPLETO sin recorte (contain) */
 .np-slide-img, .np-slide-video {
-  position: absolute; inset: 0;
-  width: 100%; height: 100%;
+  position: relative;
+  max-width: 100%; max-height: 100%;
+  width: auto; height: auto;
   object-fit: contain;
   z-index: 1;
   will-change: transform;
-  filter: brightness(1.0) contrast(1.05) saturate(1.0);
+  filter: brightness(1.0) contrast(1.0) saturate(1.0);
+  opacity: 1;
+  transition: opacity 0.5s;
+  /* Importante: sin position absolute para que flex center funcione */
+}
+.np-slide-img.np-loading, .np-slide-video.np-loading { opacity: 0; }
+/* Loader mientras carga */
+.np-slide-loader {
+  position: absolute; top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 2;
+  width: 40px; height: 40px;
+  border: 2px solid rgba(184,148,95,0.2);
+  border-top-color: #B8945F;
+  border-radius: 50%;
+  animation: npSpin 0.8s linear infinite;
+}
+@keyframes npSpin {
+  to { transform: translate(-50%, -50%) rotate(360deg); }
 }
 .np-slide-overlay {
   position: absolute; inset: 0;
   background: linear-gradient(to bottom,
-    rgba(0,0,0,0.15) 0%,
-    rgba(0,0,0,0) 20%,
-    rgba(0,0,0,0) 60%,
-    rgba(0,0,0,0.4) 85%,
-    rgba(0,0,0,0.7) 100%);
+    rgba(0,0,0,0) 70%,
+    rgba(0,0,0,0.6) 100%);
   pointer-events: none;
   z-index: 2;
 }
@@ -751,6 +900,72 @@ function HomeScreen({ onSlideshow, onUpload }: {
         </button>
       </div>
     </div>
+  )
+}
+
+// ============================================================
+// Componente: SlideMedia (imagen/video con preload + fondo borroso)
+// ============================================================
+function SlideMedia({ type, src, caption, videoRef }: {
+  type: 'image' | 'video'
+  src: string
+  caption?: string
+  videoRef?: (el: HTMLVideoElement | null) => void
+}) {
+  const [loaded, setLoaded] = useState(false)
+  const [bgLoaded, setBgLoaded] = useState(false)
+
+  return (
+    <>
+      {/* Fondo borroso de la misma imagen/video */}
+      {type === 'image' ? (
+        <>
+          {!bgLoaded && <div className="np-slide-loader" />}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            className={`np-slide-bg ${bgLoaded ? '' : 'np-loading'}`}
+            src={src}
+            alt=""
+            onLoad={() => setBgLoaded(true)}
+            onError={() => setBgLoaded(true)}
+          />
+        </>
+      ) : (
+        <video
+          className="np-slide-bg"
+          src={src}
+          muted
+          loop
+          autoPlay
+          playsInline
+          preload="metadata"
+        />
+      )}
+      {/* Imagen/video principal - se ve COMPLETO sin recorte */}
+      {type === 'image' ? (
+        <>
+          {!loaded && <div className="np-slide-loader" style={{ zIndex: 3 }} />}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            className={`np-slide-img ${loaded ? '' : 'np-loading'}`}
+            src={src}
+            alt={caption || 'Foto'}
+            onLoad={() => setLoaded(true)}
+            onError={() => setLoaded(true)}
+          />
+        </>
+      ) : (
+        <video
+          ref={videoRef}
+          className="np-slide-video"
+          src={src}
+          muted
+          playsInline
+          preload="auto"
+          onLoadedData={() => setLoaded(true)}
+        />
+      )}
+    </>
   )
 }
 
@@ -999,12 +1214,7 @@ function Slideshow({ photos, onExit }: {
           {scene.type === 'photo' && (
             <>
               <div className="np-slide-frame">
-                {/* Fondo borroso de la misma imagen */}
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img className="np-slide-bg" src={scene.photo!.path} alt="" />
-                {/* Imagen principal - se ve completa sin recorte */}
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img className="np-slide-img" src={scene.photo!.path} alt={scene.caption || 'Foto'} />
+                <SlideMedia type="image" src={scene.photo!.path} caption={scene.caption} />
                 <div className="np-slide-overlay"></div>
               </div>
               {scene.caption && (
@@ -1019,24 +1229,11 @@ function Slideshow({ photos, onExit }: {
           {scene.type === 'video' && (
             <>
               <div className="np-slide-frame">
-                {/* Fondo borroso del mismo video */}
-                <video
-                  className="np-slide-bg"
+                <SlideMedia
+                  type="video"
                   src={scene.photo!.path}
-                  muted
-                  loop
-                  autoPlay
-                  playsInline
-                  preload="auto"
-                />
-                {/* Video principal - se ve completo sin recorte */}
-                <video
-                  ref={el => { videoElsRef.current[scene.id] = el }}
-                  className="np-slide-video"
-                  src={scene.photo!.path}
-                  muted
-                  playsInline
-                  preload="auto"
+                  caption={scene.caption}
+                  videoRef={(el) => { videoElsRef.current[scene.id] = el }}
                 />
                 <div className="np-slide-overlay"></div>
               </div>
@@ -1063,30 +1260,114 @@ function Slideshow({ photos, onExit }: {
 }
 
 // ============================================================
-// Componente: Upload Modal
+// Componente: Upload Modal (con preview + edición de títulos)
 // ============================================================
+interface PendingFile {
+  id: string
+  file: File
+  title: string
+  preview: string
+  type: 'image' | 'video'
+}
+
 function UploadModal({ visible, onClose, onUploaded }: {
   visible: boolean
   onClose: () => void
   onUploaded: () => void
 }) {
+  const [pendingFiles, setPendingFiles] = useState<PendingFile[]>([])
   const [uploading, setUploading] = useState(false)
   const [progress, setProgress] = useState(0)
   const [dragover, setDragover] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
-
   const showToast = useShowToast()
 
-  const handleFiles = useCallback(async (files: FileList | null) => {
-    if (!files || files.length === 0) return
+  // Reset cuando se cierra
+  useEffect(() => {
+    if (!visible) {
+      setPendingFiles([])
+      setUploading(false)
+      setProgress(0)
+      setDragover(false)
+    }
+  }, [visible])
+
+  // Generar preview y agregar archivos
+  const addFiles = useCallback((files: FileList | File[]) => {
+    const fileArr = Array.from(files)
+    const newPending: PendingFile[] = []
+
+    for (const file of fileArr) {
+      const type = file.type.startsWith('video/') ? 'video' : 'image'
+      const id = `pf-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+      const preview = URL.createObjectURL(file)
+      // Título sugerido: nombre del archivo sin extensión
+      const title = file.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ').trim()
+
+      newPending.push({
+        id,
+        file,
+        title,
+        preview,
+        type
+      })
+    }
+
+    setPendingFiles(prev => [...prev, ...newPending])
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }, [])
+
+  const handleFileInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) addFiles(e.target.files)
+  }, [addFiles])
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    setDragover(false)
+    if (e.dataTransfer.files) addFiles(e.dataTransfer.files)
+  }, [addFiles])
+
+  const updateTitle = useCallback((id: string, title: string) => {
+    setPendingFiles(prev => prev.map(p => p.id === id ? { ...p, title } : p))
+  }, [])
+
+  const removePending = useCallback((id: string) => {
+    setPendingFiles(prev => {
+      const found = prev.find(p => p.id === id)
+      if (found) URL.revokeObjectURL(found.preview)
+      return prev.filter(p => p.id !== id)
+    })
+  }, [])
+
+  const handleUpload = useCallback(async () => {
+    if (pendingFiles.length === 0) {
+      showToast('Selecciona al menos una foto', 'info')
+      return
+    }
+
     setUploading(true)
     setProgress(0)
+
     try {
-      const result = await uploadPhotos(Array.from(files), (percent) => {
+      // Renombrar archivos con los títulos editados
+      const renamedFiles = pendingFiles.map(pf => {
+        const ext = pf.file.name.match(/\.([^.]+)$/)?.[0] || ''
+        // Sanitizar título para filename
+        const safeTitle = pf.title.trim().replace(/[<>:"/\\|?*]/g, '_') || pf.file.name
+        const newName = `${safeTitle}${ext}`
+        return new File([pf.file], newName, { type: pf.file.type })
+      })
+
+      const result = await uploadPhotos(renamedFiles, (percent) => {
         setProgress(percent)
       })
+
       if (result.success) {
-        showToast(`✓ ${result.uploaded?.length || 0} foto(s) subida(s). ¡Gracias!`, 'success')
+        const count = result.uploaded?.length || 0
+        showToast(`✓ ${count} foto(s) subida(s). ¡Gracias!`, 'success')
+        // Limpiar previews
+        pendingFiles.forEach(pf => URL.revokeObjectURL(pf.preview))
+        setPendingFiles([])
         onUploaded()
         onClose()
       } else {
@@ -1097,27 +1378,21 @@ function UploadModal({ visible, onClose, onUploaded }: {
     } finally {
       setUploading(false)
       setProgress(0)
-      if (fileInputRef.current) fileInputRef.current.value = ''
     }
-  }, [onClose, onUploaded, showToast])
-
-  const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault()
-    setDragover(false)
-    if (e.dataTransfer.files) handleFiles(e.dataTransfer.files)
-  }, [handleFiles])
+  }, [pendingFiles, onUploaded, onClose, showToast])
 
   return (
     <div
       className={`np-modal-backdrop ${visible ? 'np-visible' : ''}`}
       onClick={onClose}
     >
-      <div className="np-modal" onClick={e => e.stopPropagation()}>
+      <div className="np-modal np-upload-modal" onClick={e => e.stopPropagation()}>
         <h2>Comparte tus fotos</h2>
         <div className="subtitle">
-          Sube tus fotos y videos — aparecerán en el slideshow
+          Selecciona tus fotos y videos — podrás editar el título antes de subir
         </div>
 
+        {/* Dropzone */}
         <div
           className={`np-dropzone ${dragover ? 'dragover' : ''}`}
           onClick={() => fileInputRef.current?.click()}
@@ -1127,7 +1402,7 @@ function UploadModal({ visible, onClose, onUploaded }: {
         >
           <div className="icon">+</div>
           <div className="text">
-            {uploading ? `Subiendo... ${progress.toFixed(0)}%` : 'Click o arrastra fotos aquí'}
+            Click o arrastra fotos aquí
           </div>
           <div className="hint">
             Fotos: JPG, PNG, WebP · Videos: MP4, WebM, MOV · Máx 50MB
@@ -1140,17 +1415,60 @@ function UploadModal({ visible, onClose, onUploaded }: {
           multiple
           accept="image/*,video/*"
           style={{ display: 'none' }}
-          onChange={(e) => handleFiles(e.target.files)}
+          onChange={handleFileInput}
         />
 
-        <div className="actions">
-          <button className="btn" onClick={onClose}>Cerrar</button>
-        </div>
+        {/* Lista de archivos pendientes con preview + edición */}
+        {pendingFiles.length > 0 && (
+          <div className="np-pending-list">
+            <div className="np-pending-header">
+              <span>{pendingFiles.length} archivo(s) seleccionado(s)</span>
+            </div>
+            {pendingFiles.map((pf) => (
+              <div key={pf.id} className="np-pending-item">
+                <div className="np-pending-thumb">
+                  {pf.type === 'image' ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={pf.preview} alt={pf.title} />
+                  ) : (
+                    <video src={pf.preview} muted playsInline />
+                  )}
+                  <span className={`np-pending-badge ${pf.type}`}>
+                    {pf.type === 'image' ? 'Foto' : 'Video'}
+                  </span>
+                </div>
+                <div className="np-pending-info">
+                  <label className="np-pending-label">Título (opcional)</label>
+                  <input
+                    type="text"
+                    className="np-pending-input"
+                    value={pf.title}
+                    onChange={(e) => updateTitle(pf.id, e.target.value)}
+                    placeholder="Sin título"
+                    disabled={uploading}
+                  />
+                  <div className="np-pending-meta">
+                    {(pf.file.size / 1024).toFixed(0)} KB
+                  </div>
+                </div>
+                <button
+                  className="np-pending-remove"
+                  onClick={() => removePending(pf.id)}
+                  disabled={uploading}
+                  title="Quitar"
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
 
+        {/* Barra de progreso */}
         {uploading && (
           <div className="np-upload-progress">
             <div className="label">
-              <span>Subiendo...</span>
+              <span>Subiendo {pendingFiles.length > 1 ? `${pendingFiles.length} fotos` : pendingFiles[0]?.title || '...'}</span>
               <span className="percent">{progress.toFixed(0)}%</span>
             </div>
             <div className="bar">
@@ -1158,6 +1476,19 @@ function UploadModal({ visible, onClose, onUploaded }: {
             </div>
           </div>
         )}
+
+        <div className="actions">
+          <button className="btn" onClick={onClose} disabled={uploading}>Cerrar</button>
+          {pendingFiles.length > 0 && (
+            <button
+              className="btn btn-primary"
+              onClick={handleUpload}
+              disabled={uploading || pendingFiles.length === 0}
+            >
+              {uploading ? 'Subiendo...' : `Subir ${pendingFiles.length} foto(s)`}
+            </button>
+          )}
+        </div>
       </div>
     </div>
   )
