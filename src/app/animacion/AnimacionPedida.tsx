@@ -1052,10 +1052,34 @@ function Slideshow({ photos, onExit }: {
   const sceneElsRef = useRef<Record<string, HTMLDivElement | null>>({})
   const videoElsRef = useRef<Record<string, HTMLVideoElement | null>>({})
 
-  // Shuffle en cada loop
+  // Shuffle en cada loop - sin repetir hasta que pasen todas
+  const lastPhotoIdRef = useRef<string | null>(null)
+  
   useEffect(() => {
     if (photos.length === 0) return
-    setShuffledPhotos(shuffle(photos))
+    let newShuffled = shuffle(photos)
+    
+    // Si hay más de 1 foto, asegurar que el shuffle nuevo NO empiece
+    // con la última foto del loop anterior (evita repetición inmediata)
+    if (photos.length > 1 && lastPhotoIdRef.current) {
+      // Probar hasta 10 veces encontrar un shuffle que no empiece igual
+      let attempts = 0
+      while (newShuffled[0].id === lastPhotoIdRef.current && attempts < 10) {
+        newShuffled = shuffle(photos)
+        attempts++
+      }
+      // Si después de 10 intentos sigue igual, mover el primer elemento al final
+      if (newShuffled[0].id === lastPhotoIdRef.current) {
+        newShuffled = [...newShuffled.slice(1), newShuffled[0]]
+      }
+    }
+    
+    // Guardar el último elemento para el próximo loop
+    if (newShuffled.length > 0) {
+      lastPhotoIdRef.current = newShuffled[newShuffled.length - 1].id
+    }
+    
+    setShuffledPhotos(newShuffled)
   }, [photos, loopCount])
 
   // Build timeline
