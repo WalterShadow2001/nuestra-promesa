@@ -8,6 +8,7 @@ import {
   adminLogin,
   verifyAdminToken,
   deletePhoto,
+  updatePhotoCaption,
   type PhotoItem
 } from './photos'
 
@@ -546,6 +547,58 @@ html, body {
   color: rgba(180,80,80,1);
 }
 
+/* === Admin mini buttons (edit, save, cancel, delete) === */
+.np-admin-actions-top {
+  margin-bottom: 20px;
+}
+.np-admin-mini-btn {
+  width: 30px; height: 30px;
+  border: 1px solid rgba(184,148,95,0.3);
+  background: transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.2s;
+  padding: 0;
+  flex-shrink: 0;
+}
+.np-admin-mini-btn:disabled {
+  opacity: 0.3; cursor: not-allowed;
+}
+.np-admin-mini-edit {
+  color: #B8945F;
+}
+.np-admin-mini-edit:hover {
+  background: rgba(184,148,95,0.1);
+  border-color: #B8945F;
+}
+.np-admin-mini-save {
+  color: #5a8a5a;
+  border-color: rgba(90,138,90,0.4);
+}
+.np-admin-mini-save:hover {
+  background: rgba(90,138,90,0.1);
+  border-color: #5a8a5a;
+}
+.np-admin-mini-cancel {
+  color: rgba(180,80,80,0.7);
+  border-color: rgba(180,80,80,0.3);
+}
+.np-admin-mini-cancel:hover {
+  background: rgba(180,80,80,0.1);
+  border-color: rgba(180,80,80,0.6);
+}
+.np-admin-mini-delete {
+  color: rgba(180,80,80,0.7);
+  border-color: rgba(180,80,80,0.3);
+}
+.np-admin-mini-delete:hover {
+  background: rgba(180,80,80,0.1);
+  border-color: rgba(180,80,80,0.6);
+  color: rgba(180,80,80,1);
+}
+
 /* === Toast === */
 .np-toast {
   position: fixed; bottom: 30px; left: 50%;
@@ -917,11 +970,12 @@ function HomeScreen({ onSlideshow, onUpload, onLogoClick }: {
 // ============================================================
 // Componente: SlideMedia (imagen/video con preload + fondo borroso)
 // ============================================================
-function SlideMedia({ type, src, caption, videoRef }: {
+function SlideMedia({ type, src, caption, videoRef, onEnded }: {
   type: 'image' | 'video'
   src: string
   caption?: string
   videoRef?: (el: HTMLVideoElement | null) => void
+  onEnded?: () => void
 }) {
   const [loaded, setLoaded] = useState(false)
   const [bgLoaded, setBgLoaded] = useState(false)
@@ -974,6 +1028,7 @@ function SlideMedia({ type, src, caption, videoRef }: {
           playsInline
           preload="auto"
           onLoadedData={() => setLoaded(true)}
+          onEnded={onEnded}
         />
       )}
     </>
@@ -1023,7 +1078,8 @@ function Slideshow({ photos, onExit }: {
     const aligns: Array<'left' | 'center' | 'right'> = ['left', 'center', 'right']
     shuffledPhotos.forEach((p, i) => {
       const isVideo = p.type === 'video'
-      const duration = isVideo ? 12 : tl.photoDuration
+      // Videos: duración muy larga (300s) — se cambiará cuando el video termine (onEnded)
+      const duration = isVideo ? 300 : tl.photoDuration
       // Alineación aleatoria para fotos (videos siempre centrados)
       const align = isVideo ? 'center' : aligns[Math.floor(Math.random() * aligns.length)]
       scenes.push({
@@ -1250,6 +1306,17 @@ function Slideshow({ photos, onExit }: {
                   src={scene.photo!.path}
                   caption={scene.caption}
                   videoRef={(el) => { videoElsRef.current[scene.id] = el }}
+                  onEnded={() => {
+                    // Cuando el video termina, avanzar a la siguiente escena
+                    const currentIdx = scenes.findIndex(s => s.id === scene.id)
+                    if (currentIdx >= 0 && currentIdx < scenes.length - 1) {
+                      setCurrentTime(scenes[currentIdx + 1].start + 0.05)
+                    } else if (currentIdx === scenes.length - 1) {
+                      // Última escena - loop
+                      setLoopCount(c => c + 1)
+                      setCurrentTime(0)
+                    }
+                  }}
                 />
                 <div className="np-slide-overlay"></div>
               </div>
@@ -1592,7 +1659,7 @@ function AdminLoginModal({ visible, onClose, onSuccess }: {
 }
 
 // ============================================================
-// Componente: Admin Panel
+// Componente: Admin Panel (eliminar, agregar, editar títulos)
 // ============================================================
 function AdminPanel({ visible, onClose, token, photos, onReload }: {
   visible: boolean
@@ -1602,6 +1669,12 @@ function AdminPanel({ visible, onClose, token, photos, onReload }: {
   onReload: () => void
 }) {
   const [deleting, setDeleting] = useState<string | null>(null)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editValue, setEditValue] = useState('')
+  const [savingCaption, setSavingCaption] = useState(false)
+  const [adminUploading, setAdminUploading] = useState(false)
+  const [adminProgress, setAdminProgress] = useState(0)
+  const adminFileInputRef = useRef<HTMLInputElement>(null)
   const showToast = useShowToast()
 
   const handleDelete = useCallback(async (photo: PhotoItem) => {
@@ -1616,6 +1689,54 @@ function AdminPanel({ visible, onClose, token, photos, onReload }: {
     }
     setDeleting(null)
   }, [token, onReload, showToast])
+
+  const startEdit = useCallback((photo: PhotoItem) => {
+    setEditingId(photo.id)
+    setEditValue(photo.caption || '')
+  }, [])
+
+  const cancelEdit = useCallback(() => {
+    setEditingId(null)
+    setEditValue('')
+  }, [])
+
+  const saveEdit = useCallback(async (photo: PhotoItem) => {
+    setSavingCaption(true)
+    const result = await updatePhotoCaption(photo.id, editValue.trim(), token)
+    if (result.success) {
+      showToast('Título actualizado', 'success')
+      setEditingId(null)
+      setEditValue('')
+      onReload()
+    } else {
+      showToast(`Error: ${result.message}`, 'error')
+    }
+    setSavingCaption(false)
+  }, [editValue, token, onReload, showToast])
+
+  // Upload desde admin
+  const handleAdminUpload = useCallback(async (files: FileList | null) => {
+    if (!files || files.length === 0) return
+    setAdminUploading(true)
+    setAdminProgress(0)
+    try {
+      const result = await uploadPhotos(Array.from(files), (percent) => {
+        setAdminProgress(percent)
+      })
+      if (result.success) {
+        showToast(`✓ ${result.uploaded?.length || 0} foto(s) subida(s)`, 'success')
+        onReload()
+      } else {
+        showToast(`Error: ${result.message}`, 'error')
+      }
+    } catch (err) {
+      showToast('Error al subir', 'error')
+    } finally {
+      setAdminUploading(false)
+      setAdminProgress(0)
+      if (adminFileInputRef.current) adminFileInputRef.current.value = ''
+    }
+  }, [onReload, showToast])
 
   const imageCount = photos.filter(p => p.type === 'image').length
   const videoCount = photos.filter(p => p.type === 'video').length
@@ -1646,6 +1767,37 @@ function AdminPanel({ visible, onClose, token, photos, onReload }: {
           </div>
         </div>
 
+        {/* Botón para agregar fotos */}
+        <div className="np-admin-actions-top">
+          <input
+            ref={adminFileInputRef}
+            type="file"
+            multiple
+            accept="image/*,video/*"
+            style={{ display: 'none' }}
+            onChange={(e) => handleAdminUpload(e.target.files)}
+          />
+          <button
+            className="btn btn-primary"
+            onClick={() => adminFileInputRef.current?.click()}
+            disabled={adminUploading}
+          >
+            {adminUploading ? `Subiendo ${adminProgress.toFixed(0)}%` : '+ Agregar fotos'}
+          </button>
+        </div>
+
+        {adminUploading && (
+          <div className="np-upload-progress" style={{ position: 'relative', bottom: 'auto', marginBottom: '16px' }}>
+            <div className="label">
+              <span>Subiendo...</span>
+              <span className="percent">{adminProgress.toFixed(0)}%</span>
+            </div>
+            <div className="bar">
+              <div className="bar-fill" style={{ width: `${adminProgress}%` }}></div>
+            </div>
+          </div>
+        )}
+
         <h3>Archivos subidos</h3>
         {photos.length === 0 ? (
           <div style={{ padding: '40px', textAlign: 'center', color: 'rgba(42,38,32,0.5)' }}>
@@ -1662,18 +1814,67 @@ function AdminPanel({ visible, onClose, token, photos, onReload }: {
                   <div className="thumb" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#B8945F', fontSize: 20 }}>▶</div>
                 )}
                 <div className="info">
-                  <div className="name">{photo.caption || photo.filename}</div>
-                  <div className="meta">
-                    {(photo.size / 1024).toFixed(0)} KB · {photo.filename}
-                  </div>
+                  {editingId === photo.id ? (
+                    <>
+                      <input
+                        type="text"
+                        className="np-pending-input"
+                        value={editValue}
+                        onChange={(e) => setEditValue(e.target.value)}
+                        autoFocus
+                        disabled={savingCaption}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') saveEdit(photo)
+                          else if (e.key === 'Escape') cancelEdit()
+                        }}
+                        style={{ marginBottom: '4px' }}
+                      />
+                      <div style={{ display: 'flex', gap: '6px' }}>
+                        <button
+                          className="np-admin-mini-btn np-admin-mini-save"
+                          onClick={() => saveEdit(photo)}
+                          disabled={savingCaption}
+                        >
+                          {savingCaption ? '...' : '✓'}
+                        </button>
+                        <button
+                          className="np-admin-mini-btn np-admin-mini-cancel"
+                          onClick={cancelEdit}
+                          disabled={savingCaption}
+                        >
+                          ×
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="name">{photo.caption || photo.filename}</div>
+                      <div className="meta">
+                        {(photo.size / 1024).toFixed(0)} KB · {photo.filename}
+                      </div>
+                    </>
+                  )}
                 </div>
-                <button
-                  className="delete-btn"
-                  onClick={() => handleDelete(photo)}
-                  disabled={deleting === photo.id}
-                >
-                  {deleting === photo.id ? '...' : 'Eliminar'}
-                </button>
+                {editingId !== photo.id && (
+                  <div style={{ display: 'flex', gap: '6px' }}>
+                    <button
+                      className="np-admin-mini-btn np-admin-mini-edit"
+                      onClick={() => startEdit(photo)}
+                      disabled={deleting === photo.id}
+                      title="Editar título"
+                    >
+                      ✎
+                    </button>
+                    <button
+                      className="np-admin-mini-btn np-admin-mini-delete"
+                      onClick={() => handleDelete(photo)}
+                      disabled={deleting === photo.id}
+                      title="Eliminar"
+                    >
+                      {deleting === photo.id ? '...' : '×'}
+                    </button>
+                  </div>
+                )}
               </div>
             ))}
           </div>

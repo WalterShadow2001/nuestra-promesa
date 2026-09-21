@@ -148,3 +148,26 @@ export async function deletePhoto(photoId: string, token: string): Promise<{
     return { success: false, message: 'Error de conexión' }
   }
 }
+
+/**
+ * Actualizar título de una foto (admin)
+ */
+export async function updatePhotoCaption(
+  photoId: string,
+  caption: string,
+  token: string
+): Promise<{ success: boolean; message: string }> {
+  try {
+    const res = await fetch(`/api/photos/${encodeURIComponent(photoId)}/caption`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({ caption })
+    })
+    return await res.json()
+  } catch (error) {
+    return { success: false, message: 'Error de conexión' }
+  }
+}

@@ -103,7 +103,7 @@ export function cleanCaption(filename: string): string {
 export async function listMediaItems(): Promise<MediaItem[]> {
   const client = getTursoClient()
   const result = await client.execute({
-    sql: `SELECT id, filename, original_name, mime_type, type, caption, size, image_settings, created_at
+    sql: `SELECT id, filename, original_name, mime_type, type, caption, custom_caption, size, image_settings, created_at
           FROM media_items
           ORDER BY filename COLLATE NOCASE ASC`
   })
@@ -127,7 +127,7 @@ export async function listMediaItems(): Promise<MediaItem[]> {
       original_name: row.original_name as string,
       mime_type: row.mime_type as string,
       type: row.type as MediaType,
-      caption: (row.caption as string) || null,
+      caption: (row.custom_caption as string) || (row.caption as string) || null,
       size: row.size as number,
       image_settings: imageSettings,
       created_at: row.created_at as number
@@ -218,6 +218,19 @@ export async function updateImageSettings(
   const result = await client.execute({
     sql: `UPDATE media_items SET image_settings = ? WHERE filename = ?`,
     args: [JSON.stringify(settings), filename]
+  })
+  return (result.rowsAffected || 0) > 0
+}
+
+// Actualizar título (caption) de un item
+export async function updateCaption(
+  filename: string,
+  caption: string
+): Promise<boolean> {
+  const client = getTursoClient()
+  const result = await client.execute({
+    sql: `UPDATE media_items SET custom_caption = ? WHERE filename = ?`,
+    args: [caption, filename]
   })
   return (result.rowsAffected || 0) > 0
 }
