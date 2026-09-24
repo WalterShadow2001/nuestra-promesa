@@ -209,6 +209,42 @@ export async function deleteMediaItem(filename: string): Promise<boolean> {
   return (result.rowsAffected || 0) > 0
 }
 
+// Eliminar item por ID numérico (más seguro que por filename)
+export async function deleteMediaItemById(id: number): Promise<boolean> {
+  const client = getTursoClient()
+  const result = await client.execute({
+    sql: `DELETE FROM media_items WHERE id = ?`,
+    args: [id]
+  })
+  return (result.rowsAffected || 0) > 0
+}
+
+// Obtener filename por ID
+export async function getMediaItemById(id: number): Promise<MediaItem | null> {
+  const client = getTursoClient()
+  const result = await client.execute({
+    sql: `SELECT id, filename, original_name, mime_type, type, caption, custom_caption, size, image_settings, created_at FROM media_items WHERE id = ? LIMIT 1`,
+    args: [id]
+  })
+  if (result.rows.length === 0) return null
+  const row = result.rows[0]
+  let imageSettings: ImageSettings | null = null
+  if (row.image_settings) {
+    try { imageSettings = JSON.parse(row.image_settings as string) } catch { imageSettings = null }
+  }
+  return {
+    id: row.id as number,
+    filename: row.filename as string,
+    original_name: row.original_name as string,
+    mime_type: row.mime_type as string,
+    type: row.type as MediaType,
+    caption: (row.custom_caption as string) || (row.caption as string) || null,
+    size: row.size as number,
+    image_settings: imageSettings,
+    created_at: row.created_at as number
+  }
+}
+
 // Actualizar ajustes de imagen (pan/zoom) para un item
 export async function updateImageSettings(
   filename: string,
@@ -231,6 +267,19 @@ export async function updateCaption(
   const result = await client.execute({
     sql: `UPDATE media_items SET custom_caption = ? WHERE filename = ?`,
     args: [caption, filename]
+  })
+  return (result.rowsAffected || 0) > 0
+}
+
+// Actualizar título por ID numérico
+export async function updateCaptionById(
+  id: number,
+  caption: string
+): Promise<boolean> {
+  const client = getTursoClient()
+  const result = await client.execute({
+    sql: `UPDATE media_items SET custom_caption = ? WHERE id = ?`,
+    args: [caption, id]
   })
   return (result.rowsAffected || 0) > 0
 }

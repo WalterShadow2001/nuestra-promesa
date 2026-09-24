@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { updateCaption, listMediaItems } from '@/lib/turso'
+import { updateCaption, updateCaptionById } from '@/lib/turso'
 import { verifyAdminSession, getTokenFromRequest } from '@/lib/auth'
 
 // PATCH /api/photos/[id]/caption - actualizar título (solo admin)
@@ -28,9 +28,21 @@ export async function PATCH(
       )
     }
 
-    // En Turso, el "id" es el filename
-    const success = await updateCaption(id, caption.trim())
+    // Intentar primero por ID numérico
+    const numericId = parseInt(id, 10)
+    if (!isNaN(numericId)) {
+      const success = await updateCaptionById(numericId, caption.trim())
+      if (success) {
+        return NextResponse.json({
+          success: true,
+          message: 'Título actualizado',
+          caption: caption.trim()
+        })
+      }
+    }
 
+    // Fallback por filename
+    const success = await updateCaption(id, caption.trim())
     if (!success) {
       return NextResponse.json(
         { success: false, error: 'Archivo no encontrado' },
