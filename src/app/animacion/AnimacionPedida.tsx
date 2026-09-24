@@ -690,7 +690,7 @@ html, body {
   opacity: 0; pointer-events: none;
   will-change: opacity;
   cursor: pointer;
-  background: #000;
+  background: #FAFAF7;
 }
 .np-slide.np-active { opacity: 1; pointer-events: auto; }
 .np-slide.np-align-left { justify-content: flex-start; }
@@ -698,17 +698,17 @@ html, body {
 .np-slide.np-align-center { justify-content: center; }
 .np-slide-frame {
   position: absolute; inset: 0; overflow: hidden;
-  background: #000;
+  background: #FAFAF7;
 }
-/* Fondo borroso de la misma imagen/video (llena la pantalla, recortado) */
+/* Fondo borroso de la misma imagen/video - LUMINOSO (no oscuro) */
 .np-slide-bg {
   position: absolute; inset: -10%;
   width: 120%; height: 120%;
   object-fit: cover;
-  filter: blur(40px) brightness(0.5) saturate(1.3);
+  filter: blur(30px) brightness(1.1) saturate(1.4) contrast(0.95);
   z-index: 0;
   pointer-events: none;
-  opacity: 1;
+  opacity: 0.95;
   transition: opacity 0.5s;
 }
 .np-slide-bg.np-loading { opacity: 0; }
@@ -744,8 +744,9 @@ html, body {
 .np-slide-overlay {
   position: absolute; inset: 0;
   background: linear-gradient(to bottom,
-    rgba(0,0,0,0) 70%,
-    rgba(0,0,0,0.6) 100%);
+    rgba(0,0,0,0) 60%,
+    rgba(0,0,0,0.3) 90%,
+    rgba(0,0,0,0.5) 100%);
   pointer-events: none;
   z-index: 2;
 }
@@ -757,6 +758,7 @@ html, body {
   max-width: 90vw;
   overflow: hidden;
   text-overflow: ellipsis;
+  opacity: 1;
 }
 .np-slide-caption .divider {
   display: inline-block; width: 60px; height: 1px;
@@ -1038,9 +1040,10 @@ function SlideMedia({ type, src, caption, videoRef, onEnded }: {
 // ============================================================
 // Componente: Slideshow (fullscreen)
 // ============================================================
-function Slideshow({ photos, onExit }: {
+function Slideshow({ photos, onExit, onRefreshPhotos }: {
   photos: PhotoItem[]
   onExit: () => void
+  onRefreshPhotos: () => void
 }) {
   const [currentTime, setCurrentTime] = useState(0)
   const [currentSceneIndex, setCurrentSceneIndex] = useState(-1)
@@ -1119,25 +1122,13 @@ function Slideshow({ photos, onExit }: {
       })
       total += duration
     })
-    // Escena final (solo en loop 0)
-    if (loopCount === 0) {
-      scenes.push({
-        id: 'scene-final',
-        type: 'final',
-        start: total,
-        end: total + tl.finalScene,
-        transitionIn: 1.5,
-        transitionOut: 1.0
-      })
-      total += tl.finalScene + tl.loopPause
-    } else {
-      total += tl.loopPause
-    }
-  }, [shuffledPhotos, loopCount, tl.photoDuration, tl.photoTransition, tl.finalScene, tl.loopPause])
+    // SIN escena final — slideshow infinito puro
+    total += tl.loopPause
+  }, [shuffledPhotos, loopCount, tl.photoDuration, tl.photoTransition, tl.loopPause])
 
   const totalDuration = scenes.length > 0 ? scenes[scenes.length - 1].end + tl.loopPause : 0
 
-  // RAF loop
+  // RAF loop - infinito
   useEffect(() => {
     const loop = (time: number) => {
       let dt = time - lastTimeRef.current
@@ -1148,6 +1139,7 @@ function Slideshow({ photos, onExit }: {
         setCurrentTime(prev => {
           const next = prev + (dt / 1000)
           if (next >= totalDuration) {
+            // Loop completado: incrementar loopCount para re-shuffle
             setLoopCount(c => c + 1)
             return 0
           }
@@ -1161,13 +1153,16 @@ function Slideshow({ photos, onExit }: {
     return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current) }
   }, [isPlaying, totalDuration])
 
-  // Reset al cambiar loop
+  // Reset al cambiar loop + recargar fotos para obtener nuevas
   useEffect(() => {
     if (loopCount > 0) {
       setCurrentTime(0)
       setCurrentSceneIndex(-1)
+      // Recargar fotos del servidor al terminar cada loop
+      // (para obtener fotos nuevas que hayan subido los invitados)
+      onRefreshPhotos()
     }
-  }, [loopCount])
+  }, [loopCount, onRefreshPhotos])
 
   // Detectar escena activa
   useEffect(() => {
@@ -2082,6 +2077,7 @@ export default function AnimacionPedida() {
         <Slideshow
           photos={photos}
           onExit={() => setMode('home')}
+          onRefreshPhotos={loadPhotos}
         />
       )}
 
