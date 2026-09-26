@@ -1451,18 +1451,15 @@ function UploadModal({ visible, onClose, onUploaded }: {
     setProgress(0)
 
     try {
-      // Renombrar archivos con los títulos editados
-      const renamedFiles = pendingFiles.map(pf => {
-        const ext = pf.file.name.match(/\.([^.]+)$/)?.[0] || ''
-        // Sanitizar título para filename
-        const safeTitle = pf.title.trim().replace(/[<>:"/\\|?*]/g, '_') || pf.file.name
-        const newName = `${safeTitle}${ext}`
-        return new File([pf.file], newName, { type: pf.file.type })
-      })
+      // Usar los archivos originales (sin renombrar en el frontend)
+      // El backend ya sanitiza el filename
+      const filesToUpload = pendingFiles.map(pf => pf.file)
 
-      const result = await uploadPhotos(renamedFiles, (percent) => {
+      console.log('Subiendo', filesToUpload.length, 'archivos')
+      const result = await uploadPhotos(filesToUpload, (percent) => {
         setProgress(percent)
       })
+      console.log('Resultado upload:', result)
 
       if (result.success) {
         const count = result.uploaded?.length || 0
@@ -1476,6 +1473,7 @@ function UploadModal({ visible, onClose, onUploaded }: {
         showToast(`Error: ${result.message}`, 'error')
       }
     } catch (err) {
+      console.error('Error en handleUpload:', err)
       showToast('Error al subir fotos', 'error')
     } finally {
       setUploading(false)

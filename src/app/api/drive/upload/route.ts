@@ -111,7 +111,7 @@ async function uploadToTurso(request: Request) {
       }
 
       const bytes = await file.arrayBuffer()
-      const data = new Uint8Array(bytes)
+      const data = Buffer.from(bytes)
       const safeName = await getUniqueFilename(sanitizeFilename(filename))
 
       await createMediaItem({

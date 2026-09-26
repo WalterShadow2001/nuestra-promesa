@@ -37,7 +37,7 @@ export async function fetchPhotos(): Promise<PhotosResponse> {
 }
 
 /**
- * Subir archivos (guest upload)
+ * Subir archivos (guest upload) - versión robusta
  */
 export async function uploadPhotos(
   files: File[],
@@ -54,7 +54,8 @@ export async function uploadPhotos(
 
   const formData = new FormData()
   for (const file of files) {
-    formData.append('files', file)
+    // Usar el archivo directamente - FormData maneja File objects correctamente
+    formData.append('files', file, file.name)
   }
 
   // XMLHttpRequest para progreso
@@ -70,20 +71,24 @@ export async function uploadPhotos(
     }
 
     xhr.onload = () => {
+      console.log('Upload response status:', xhr.status)
+      console.log('Upload response text:', xhr.responseText?.substring(0, 200))
       try {
         const result = JSON.parse(xhr.responseText)
         resolve(result)
       } catch {
-        resolve({ success: false, message: 'Error parseando respuesta' })
+        resolve({ success: false, message: `Error parseando respuesta (status ${xhr.status})` })
       }
     }
 
     xhr.onerror = () => {
-      resolve({ success: false, message: 'Error de red' })
+      console.error('Upload network error')
+      resolve({ success: false, message: 'Error de red al subir' })
     }
 
     xhr.ontimeout = () => {
-      resolve({ success: false, message: 'Timeout' })
+      console.error('Upload timeout')
+      resolve({ success: false, message: 'Timeout: el servidor tardó demasiado' })
     }
 
     xhr.timeout = 120000
