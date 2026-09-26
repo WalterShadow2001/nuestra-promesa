@@ -670,19 +670,6 @@ html, body {
   background: rgba(184,148,95,0.1);
   border-color: #B8945F;
 }
-.np-slideshow-hint {
-  position: fixed; bottom: 24px; right: 24px; z-index: 200;
-  font-family: 'Inter', sans-serif;
-  font-size: 11px; letter-spacing: 0.3em;
-  text-transform: uppercase;
-  color: rgba(250,250,247,0.5);
-  pointer-events: none;
-  animation: npHintPulse 3s ease-in-out infinite;
-}
-@keyframes npHintPulse {
-  0%, 100% { opacity: 0.3; }
-  50% { opacity: 0.7; }
-}
 
 .np-slide {
   position: absolute; inset: 0;
@@ -1285,7 +1272,6 @@ function Slideshow({ photos, onExit, onRefreshPhotos }: {
   return (
     <div className="np-slideshow">
       <button className="np-slideshow-exit" onClick={(e) => { e.stopPropagation(); onExit() }} title="Salir (ESC)">×</button>
-      <div className="np-slideshow-hint">Click para avanzar</div>
       {scenes.map((scene) => (
         <div
           key={scene.id}
@@ -1297,8 +1283,9 @@ function Slideshow({ photos, onExit, onRefreshPhotos }: {
             if (currentIdx >= 0 && currentIdx < scenes.length - 1) {
               setCurrentTime(scenes[currentIdx + 1].start + 0.05)
             } else if (currentIdx === scenes.length - 1) {
-              // Última escena - salir
-              onExit()
+              // Última escena - hacer loop (NO salir)
+              setLoopCount(c => c + 1)
+              setCurrentTime(0)
             }
           }}
         >

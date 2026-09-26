@@ -18,6 +18,10 @@ export const metadata: Metadata = {
   description: "Album de fotos de la boda de Dariana & Walter — 26 de Septiembre, 2026",
   keywords: ["boda", "album", "Dariana", "Walter", "boda civil"],
   authors: [{ name: "Dariana & Walter" }],
+  icons: {
+    icon: '/favicon.svg',
+    apple: '/favicon.svg',
+  },
   openGraph: {
     title: "Album Boda Dariana & Walter",
     description: "Comparte tus fotos de nuestra boda civil",
