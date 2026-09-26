@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { isDriveConfigured, uploadFile } from '@/lib/drive'
 import { createMediaItem, getMediaType, getMimeType, getUniqueFilename } from '@/lib/turso'
+import { clearPhotosCache } from '@/lib/photos-cache'
 
 const MAX_SIZE = 50 * 1024 * 1024  // 50MB
 
@@ -58,6 +59,10 @@ export async function POST(request: Request) {
       } else {
         errors.push({ filename, error: 'Error al subir a Drive' })
       }
+    }
+
+    if (uploaded.length > 0) {
+      clearPhotosCache()
     }
 
     return NextResponse.json({
@@ -118,6 +123,10 @@ async function uploadToTurso(request: Request) {
         data
       })
       uploaded.push(safeName)
+    }
+
+    if (uploaded.length > 0) {
+      clearPhotosCache()
     }
 
     return NextResponse.json({

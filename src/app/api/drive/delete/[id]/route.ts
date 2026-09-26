@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { isDriveConfigured, deleteFile as driveDeleteFile } from '@/lib/drive'
 import { deleteMediaItem, deleteMediaItemById } from '@/lib/turso'
 import { verifyAdminSession, getTokenFromRequest } from '@/lib/auth'
+import { clearPhotosCache } from '@/lib/photos-cache'
 
 // DELETE /api/drive/delete/[id] - eliminar archivo (solo admin)
 export async function DELETE(
@@ -9,7 +10,6 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    // Verificar autenticación admin
     const token = getTokenFromRequest(request)
     if (!token || !(await verifyAdminSession(token))) {
       return NextResponse.json(
@@ -21,7 +21,6 @@ export async function DELETE(
     const { id } = await params
 
     if (isDriveConfigured()) {
-      // Eliminar de Drive (por file ID)
       const ok = await driveDeleteFile(id)
       if (!ok) {
         return NextResponse.json(
@@ -29,24 +28,25 @@ export async function DELETE(
           { status: 500 }
         )
       }
+      clearPhotosCache()
       return NextResponse.json({
         success: true,
         message: 'Archivo eliminado de Drive'
       })
     } else {
-      // Fallback a Turso
-      // Intentar primero por ID numérico (lo que pasa el frontend)
+      // Intentar primero por ID numérico
       const numericId = parseInt(id, 10)
       if (!isNaN(numericId)) {
         const ok = await deleteMediaItemById(numericId)
         if (ok) {
+          clearPhotosCache()
           return NextResponse.json({
             success: true,
             message: 'Archivo eliminado'
           })
         }
       }
-      // Si no funciona por ID, intentar por filename
+      // Fallback por filename
       const ok = await deleteMediaItem(id)
       if (!ok) {
         return NextResponse.json(
@@ -54,6 +54,7 @@ export async function DELETE(
           { status: 404 }
         )
       }
+      clearPhotosCache()
       return NextResponse.json({
         success: true,
         message: 'Archivo eliminado'

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { updateCaption, updateCaptionById } from '@/lib/turso'
 import { verifyAdminSession, getTokenFromRequest } from '@/lib/auth'
+import { clearPhotosCache } from '@/lib/photos-cache'
 
 // PATCH /api/photos/[id]/caption - actualizar título (solo admin)
 export async function PATCH(
@@ -33,6 +34,7 @@ export async function PATCH(
     if (!isNaN(numericId)) {
       const success = await updateCaptionById(numericId, caption.trim())
       if (success) {
+        clearPhotosCache()
         return NextResponse.json({
           success: true,
           message: 'Título actualizado',
@@ -50,6 +52,7 @@ export async function PATCH(
       )
     }
 
+    clearPhotosCache()
     return NextResponse.json({
       success: true,
       message: 'Título actualizado',

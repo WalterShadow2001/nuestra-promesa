@@ -2,11 +2,12 @@ import { NextResponse } from 'next/server'
 import { isDriveConfigured, listMediaFiles, type DriveFile } from '@/lib/drive'
 import { listMediaItems, type MediaItem } from '@/lib/turso'
 import { cleanCaption } from '@/lib/turso'
+import { getPhotosCache, setPhotosCache } from '@/lib/photos-cache'
 
 interface PhotoItem {
   id: string
   filename: string
-  path: string  // URL para cargar el archivo
+  path: string
   type: 'image' | 'video'
   size: number
   caption: string
@@ -14,32 +15,23 @@ interface PhotoItem {
   source: 'drive' | 'turso'
 }
 
-// Cache simple en memoria (5 minutos)
-let _cache: { photos: PhotoItem[]; expiresAt: number } | null = null
-const CACHE_TTL_MS = 5 * 60 * 1000  // 5 minutos
-
-function clearCache() {
-  _cache = null
-}
-
 export async function GET() {
   try {
     // Si hay cache válido, usarlo
-    if (_cache && _cache.expiresAt > Date.now()) {
+    const cached = getPhotosCache()
+    if (cached) {
       return NextResponse.json({
         success: true,
-        count: _cache.photos.length,
-        source: _cache.photos[0]?.source || 'unknown',
-        items: _cache.photos,
-        cached: true,
-        cachedUntil: new Date(_cache.expiresAt).toISOString()
+        count: cached.length,
+        source: cached[0]?.source || 'unknown',
+        items: cached,
+        cached: true
       })
     }
 
     let photos: PhotoItem[] = []
 
     if (isDriveConfigured()) {
-      // Usar Google Drive
       const files = await listMediaFiles()
       photos = files.map((f: DriveFile) => ({
         id: f.id,
@@ -52,7 +44,6 @@ export async function GET() {
         source: 'drive' as const
       }))
     } else {
-      // Fallback a Turso
       const items = await listMediaItems()
       photos = items.map((item: MediaItem) => ({
         id: String(item.id),
@@ -67,18 +58,14 @@ export async function GET() {
     }
 
     // Guardar en cache
-    _cache = {
-      photos,
-      expiresAt: Date.now() + CACHE_TTL_MS
-    }
+    setPhotosCache(photos)
 
     return NextResponse.json({
       success: true,
       count: photos.length,
       source: photos[0]?.source || 'unknown',
       items: photos,
-      cached: false,
-      cachedUntil: new Date(_cache.expiresAt).toISOString()
+      cached: false
     })
   } catch (error) {
     console.error('Error en /api/photos:', error)
@@ -94,7 +81,7 @@ export async function GET() {
   }
 }
 
-// Captions por defecto que se ciclan
+// Captions por defecto
 const DEFAULT_CAPTIONS = [
   'Juntos para siempre',
   'Nuestro día llegó',
